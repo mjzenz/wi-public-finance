@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+Lib/
+Scripts/
+pyvenv.cfg
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+tmpclaude-*
+*.tmp
+*.temp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (large Excel files - uncomment if you want to track them)
+# data/*.xlsx
+# data/*.xls
+
+# Output files (uncomment if you don't want to track generated CSVs)
+# *.csv
+
+# Credentials and API keys
+.env
+*.key
+credentials.json
