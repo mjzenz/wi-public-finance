@@ -77,6 +77,7 @@ department_jobgroup_prop['fte_proportion'] = (
     department_jobgroup_prop['total_fte']
 )
 
+
 admin_ss_division_list = ['Div for Teaching and Learning',
        'Graduate School', 'General Educational Admin',
        'Recreation & Wellbeing', 'Collab Adv Learning & Teaching',
