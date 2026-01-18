@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -3 -c:*)",
+      "Bash(py -3 -m pip install:*)",
+      "Bash(py -3 -m py_compile salary_app.py)",
+      "Bash(timeout 10 py:*)"
+    ]
+  }
+}

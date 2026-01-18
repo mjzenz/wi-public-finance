@@ -28,6 +28,8 @@ venv/
 ENV/
 env/
 .venv/
+etc/
+share/
 
 # IDE
 .vscode/
