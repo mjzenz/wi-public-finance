@@ -1,0 +1,416 @@
+---
+title: "Inflation Adjustment and Real vs Nominal Values"
+subtitle: "Lesson 9"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Explain the difference between nominal and real (inflation-adjusted) values
+- Understand the Consumer Price Index (CPI) and how it measures inflation
+- Fetch CPI data from the FRED API
+- Calculate real salaries in constant dollars
+- Interpret real vs nominal salary changes
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Key Financial Concept: Real vs Nominal Values
+
+**Nominal values** are raw dollar amounts at their face value. A $50,000 salary in 2021 is simply $50,000.
+
+**Real values** adjust for inflation to enable meaningful comparisons across time. That $50,000 in 2021 might have the purchasing power of $55,000 in 2024 dollars due to inflation.
+
+Without inflation adjustment, a 3% raise during 5% inflation is actually a **pay cut** in purchasing power.
+:::
+
+::: {.concept-box}
+#### HE Budget Pressure and Baumol's Cost Disease
+
+Higher education suffers from what economist William Baumol called the **"cost disease"** of labor-intensive industries. A university can't increase faculty productivity the way a factory automates production — a class still needs an instructor, a lab still needs a PI. Yet universities compete for talent in markets where salaries rise with the broader economy.
+
+The result: **salary costs grow faster than many public revenue sources**. Wisconsin state appropriations to UW have been essentially flat in real terms since 2008, while health insurance costs and salary market rates have risen steadily. This structural gap means that even maintaining current salary levels requires finding new revenue or cutting elsewhere.
+
+When you inflation-adjust salary data, you're not just doing arithmetic — you're measuring how well the institution has kept pace with economic reality. A finding that "median faculty salaries grew 12% over 10 years" sounds positive until you show that CPI rose 25% over the same period, revealing a 13% real decline in purchasing power. This is the kind of analysis that drives budget requests and policy discussions.
+:::
+
+Understanding real vs nominal values is essential for salary analysis. Between 2021 and 2024, cumulative inflation was roughly 18%. An employee whose nominal salary stayed flat actually experienced an 18% real pay cut.
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Sample salary data across time
+salary_data = pd.DataFrame({
+    "employee_id": ["E001", "E001", "E001", "E001"],
+    "date": pd.to_datetime(["2021-11-01", "2022-08-01", "2023-10-01", "2024-09-01"]),
+    "salary": [80000, 82000, 84000, 86000]
+})
+
+salary_data
+```
+
+## Understanding the Consumer Price Index
+
+The **Consumer Price Index (CPI)** measures the average change over time in prices paid by consumers for a basket of goods and services.
+
+Key points:
+- Published monthly by the Bureau of Labor Statistics (BLS)
+- The most common series is **CPI-U** (All Urban Consumers)
+- Higher CPI = higher prices = less purchasing power per dollar
+
+```{python}
+# Sample CPI data (CPIAUCSL - All Urban Consumers, Seasonally Adjusted)
+cpi_data = pd.DataFrame({
+    "date": pd.to_datetime(["2021-11-01", "2022-08-01", "2023-10-01", "2024-09-01"]),
+    "cpi": [277.948, 296.171, 307.671, 314.796]
+})
+
+# Calculate year-over-year inflation
+cpi_data["yoy_inflation"] = cpi_data["cpi"].pct_change(periods=1) * 100
+
+cpi_data
+```
+
+### CPI Interpretation
+
+```{python}
+# How much did prices increase from 2021-11 to 2024-09?
+start_cpi = 277.948
+end_cpi = 314.796
+
+total_inflation = (end_cpi / start_cpi - 1) * 100
+print(f"Total inflation from Nov 2021 to Sep 2024: {total_inflation:.1f}%")
+print(f"A dollar in 2021 is worth ${start_cpi/end_cpi:.2f} in 2024 purchasing power")
+```
+
+## Calculating Real Salaries
+
+The formula for converting to constant dollars:
+
+$$\text{Real Salary} = \text{Nominal Salary} \times \frac{\text{CPI}_{\text{base period}}}{\text{CPI}_{\text{current period}}}$$
+
+We'll express all salaries in **2021 dollars** (our base period):
+
+```{python}
+# Define base CPI (November 2021)
+base_cpi = 277.948
+
+# Calculate CPI index (multiplier to convert to 2021 dollars)
+cpi_data["cpi_2021_index"] = base_cpi / cpi_data["cpi"]
+cpi_data
+```
+
+```{python}
+# Merge CPI data with salary data
+salary_with_cpi = pd.merge(salary_data, cpi_data[["date", "cpi", "cpi_2021_index"]], on="date")
+
+# Calculate real salary
+salary_with_cpi["real_salary_2021"] = salary_with_cpi["salary"] * salary_with_cpi["cpi_2021_index"]
+
+salary_with_cpi
+```
+
+### Interpreting the Results
+
+```{python}
+# Compare nominal vs real changes
+first_row = salary_with_cpi.iloc[0]
+last_row = salary_with_cpi.iloc[-1]
+
+nominal_change = last_row["salary"] - first_row["salary"]
+nominal_pct = (nominal_change / first_row["salary"]) * 100
+
+real_change = last_row["real_salary_2021"] - first_row["real_salary_2021"]
+real_pct = (real_change / first_row["real_salary_2021"]) * 100
+
+print(f"Nominal salary change: ${nominal_change:,.0f} ({nominal_pct:+.1f}%)")
+print(f"Real salary change:    ${real_change:,.0f} ({real_pct:+.1f}%)")
+print(f"\nDespite a ${nominal_change:,.0f} raise, purchasing power {'increased' if real_change > 0 else 'decreased'} by ${abs(real_change):,.0f}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Using dplyr
+salary_data %>%
+  left_join(cpi_data, by = "date") %>%
+  mutate(
+    cpi_2021_index = base_cpi / cpi,
+    real_salary_2021 = salary * cpi_2021_index
+  )
+```
+:::
+
+## Fetching CPI Data from FRED
+
+The Federal Reserve Economic Data (FRED) provides free access to CPI data via API.
+
+### Using the `fredapi` Library
+
+```{python}
+#| eval: false
+from fredapi import Fred
+import os
+
+# Initialize with API key (get free key at https://fred.stlouisfed.org/docs/api/api_key.html)
+fred = Fred(api_key=os.environ.get("FRED_API_KEY"))
+
+# Fetch CPI data
+cpi_series = fred.get_series("CPIAUCSL", observation_start="2020-01-01")
+
+# Convert to DataFrame
+cpi_df = cpi_series.reset_index()
+cpi_df.columns = ["date", "cpi"]
+cpi_df.head()
+```
+
+### Caching CPI Data
+
+To avoid repeated API calls, save the data locally:
+
+```{python}
+#| eval: false
+def fetch_and_cache_cpi(api_key, cache_path="data/cpi_data.csv"):
+    """Fetch CPI data from FRED and cache locally."""
+    from fredapi import Fred
+    import os
+
+    # Check if cache exists and is recent
+    if os.path.exists(cache_path):
+        cached = pd.read_csv(cache_path, parse_dates=["date"])
+        # If cache is less than 30 days old, use it
+        if (pd.Timestamp.today() - cached["date"].max()).days < 30:
+            return cached
+
+    # Fetch fresh data
+    fred = Fred(api_key=api_key)
+    cpi_series = fred.get_series("CPIAUCSL")
+
+    cpi_df = cpi_series.reset_index()
+    cpi_df.columns = ["date", "cpi"]
+
+    # Calculate 2021 index
+    base_cpi = cpi_df[cpi_df["date"] == "2021-11-01"]["cpi"].values[0]
+    cpi_df["cpi_2021_index"] = base_cpi / cpi_df["cpi"]
+
+    # Save cache
+    cpi_df.to_csv(cache_path, index=False)
+
+    return cpi_df
+```
+
+## Complete Inflation Adjustment Pipeline
+
+Let's put it all together with a realistic example:
+
+```{python}
+# Simulate multiple employees across multiple periods
+np.random.seed(42)
+
+employees = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004", "E005"] * 4,
+    "date": (["2021-11-01"] * 5 + ["2022-08-01"] * 5 +
+             ["2023-10-01"] * 5 + ["2024-09-01"] * 5),
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"] * 4,
+    "salary": [
+        80000, 95000, 72000, 110000, 65000,  # 2021-11
+        82000, 98000, 74000, 113000, 67000,  # 2022-08 (+2.5%)
+        84000, 101000, 76000, 116000, 69000,  # 2023-10 (+2.5%)
+        86000, 104000, 78000, 119000, 71000   # 2024-09 (+2.5%)
+    ]
+})
+employees["date"] = pd.to_datetime(employees["date"])
+
+# CPI data
+cpi = pd.DataFrame({
+    "date": pd.to_datetime(["2021-11-01", "2022-08-01", "2023-10-01", "2024-09-01"]),
+    "cpi": [277.948, 296.171, 307.671, 314.796]
+})
+
+# Calculate index with 2021-11 as base
+base_cpi = cpi[cpi["date"] == "2021-11-01"]["cpi"].values[0]
+cpi["cpi_2021_index"] = base_cpi / cpi["cpi"]
+
+# Merge and calculate real salaries
+df = pd.merge(employees, cpi, on="date")
+df["real_salary_2021"] = (df["salary"] * df["cpi_2021_index"]).round(0)
+
+df[["last_name", "date", "salary", "cpi", "cpi_2021_index", "real_salary_2021"]].head(12)
+```
+
+### Analyzing Real Salary Changes
+
+```{python}
+# Calculate change from first to last period per employee
+first_period = df[df["date"] == "2021-11-01"][["employee_id", "salary", "real_salary_2021"]]
+first_period.columns = ["employee_id", "salary_2021", "real_salary_2021_base"]
+
+last_period = df[df["date"] == "2024-09-01"][["employee_id", "last_name", "salary", "real_salary_2021"]]
+last_period.columns = ["employee_id", "last_name", "salary_2024", "real_salary_2024"]
+
+comparison = pd.merge(first_period, last_period, on="employee_id")
+
+# Calculate changes
+comparison["nominal_change"] = comparison["salary_2024"] - comparison["salary_2021"]
+comparison["nominal_pct"] = (comparison["nominal_change"] / comparison["salary_2021"] * 100).round(1)
+comparison["real_change"] = comparison["real_salary_2024"] - comparison["real_salary_2021_base"]
+comparison["real_pct"] = (comparison["real_change"] / comparison["real_salary_2021_base"] * 100).round(1)
+
+comparison[["last_name", "salary_2021", "salary_2024", "nominal_pct", "real_pct"]]
+```
+
+### Visualization of Trends
+
+```{python}
+# Summary by date
+trend = df.groupby("date").agg({
+    "salary": "median",
+    "real_salary_2021": "median"
+}).reset_index()
+
+trend.columns = ["date", "median_nominal", "median_real_2021"]
+trend["date_str"] = trend["date"].dt.strftime("%Y-%m")
+
+print("Median Salary Trends (Nominal vs Real 2021 Dollars):")
+print(trend)
+```
+
+## Interpreting Real vs Nominal Salary Growth
+
+::: {.concept-box}
+#### What Does Negative Real Growth Mean?
+
+If an employee's **nominal salary increased** but their **real salary decreased**, it means:
+
+1. Their raise was smaller than inflation
+2. They can buy less with their new salary than before
+3. They effectively took a pay cut in purchasing power
+
+Example: A 2.5% annual raise during 5% annual inflation = **2.5% real pay cut**
+:::
+
+## FTE-Adjusted Real Salary
+
+For part-time employees, we often want the FTE-adjusted real salary:
+
+```{python}
+# Add FTE to our data
+df["fte"] = [1.0, 1.0, 0.8, 1.0, 0.5] * 4  # Some are part-time
+
+# Calculate FTE-adjusted salaries (both nominal and real)
+df["fte_adjusted_salary"] = df["salary"] * df["fte"]
+df["fte_adjusted_real_2021"] = df["real_salary_2021"] * df["fte"]
+
+df[["last_name", "date", "salary", "fte", "fte_adjusted_salary",
+    "real_salary_2021", "fte_adjusted_real_2021"]].head(8)
+```
+
+## Quick Reference
+
+| Concept | Formula |
+|---------|---------|
+| CPI Index (to base year) | base_cpi / current_cpi |
+| Real Salary | nominal_salary × cpi_index |
+| Nominal Change | salary_end - salary_start |
+| Real Change | real_salary_end - real_salary_start |
+| Total Inflation | (cpi_end / cpi_start - 1) × 100 |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 9: Inflation-Adjusted Salary Analysis
+
+1. Create a DataFrame with 4 employees and their salaries at two points (2022 and 2024)
+2. Create CPI data for those dates (2022-01: 281.148, 2024-01: 308.417)
+3. Calculate the CPI index using 2022 as the base year
+4. Calculate real salaries in 2022 dollars
+5. Determine which employees had real salary increases vs decreases
+6. Calculate the total inflation between the two periods
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+
+# 1. Employee salary data
+employees = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004"] * 2,
+    "date": pd.to_datetime(["2022-01-01"] * 4 + ["2024-01-01"] * 4),
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN"] * 2,
+    "salary": [
+        80000, 95000, 72000, 110000,  # 2022
+        84000, 98000, 75000, 120000   # 2024 (various raise levels)
+    ]
+})
+
+print("1. Employee salary data:")
+print(employees)
+
+# 2. CPI data
+cpi = pd.DataFrame({
+    "date": pd.to_datetime(["2022-01-01", "2024-01-01"]),
+    "cpi": [281.148, 308.417]
+})
+
+print("\n2. CPI data:")
+print(cpi)
+
+# 3. Calculate CPI index with 2022 as base
+base_cpi = cpi[cpi["date"] == "2022-01-01"]["cpi"].values[0]
+cpi["cpi_2022_index"] = base_cpi / cpi["cpi"]
+
+print("\n3. CPI index (2022 base):")
+print(cpi)
+
+# 4. Merge and calculate real salaries
+df = pd.merge(employees, cpi, on="date")
+df["real_salary_2022"] = (df["salary"] * df["cpi_2022_index"]).round(0)
+
+print("\n4. Real salaries in 2022 dollars:")
+print(df[["last_name", "date", "salary", "real_salary_2022"]])
+
+# 5. Determine winners and losers
+start = df[df["date"] == "2022-01-01"][["employee_id", "last_name", "salary", "real_salary_2022"]]
+start.columns = ["employee_id", "last_name", "salary_2022", "real_2022"]
+
+end = df[df["date"] == "2024-01-01"][["employee_id", "salary", "real_salary_2022"]]
+end.columns = ["employee_id", "salary_2024", "real_2024"]
+
+comparison = pd.merge(start, end, on="employee_id")
+comparison["real_change"] = comparison["real_2024"] - comparison["real_2022"]
+comparison["real_increase"] = comparison["real_change"] > 0
+
+print("\n5. Real salary changes:")
+print(comparison[["last_name", "salary_2022", "salary_2024", "real_change", "real_increase"]])
+
+# 6. Total inflation
+total_inflation = (cpi[cpi["date"] == "2024-01-01"]["cpi"].values[0] /
+                   cpi[cpi["date"] == "2022-01-01"]["cpi"].values[0] - 1) * 100
+
+print(f"\n6. Total inflation 2022-01 to 2024-01: {total_inflation:.1f}%")
+print(f"   Employees needed at least a {total_inflation:.1f}% raise to maintain purchasing power")
+```
+:::
+:::
+
+## Summary
+
+You've learned to work with inflation-adjusted values:
+
+- **Nominal vs Real**: Nominal is face value; real adjusts for purchasing power
+- **CPI**: Consumer Price Index measures inflation
+- **CPI Index**: `base_cpi / current_cpi` gives the multiplier for constant dollars
+- **Real Salary**: `nominal_salary × cpi_index`
+- **Interpretation**: Negative real change = purchasing power loss despite nominal gain
+
+Key insight: Between 2021-2024, employees needed roughly 13% cumulative raises just to maintain purchasing power. Those with smaller raises experienced real pay cuts.
+
+## Next Steps
+
+Continue to [Lesson 10: Compensation Analysis and Distributions](10-compensation-analysis.qmd) to learn about peer comparisons and salary equity analysis.

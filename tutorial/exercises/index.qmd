@@ -1,0 +1,62 @@
+---
+title: "Exercises"
+---
+
+## Exercise Index
+
+Each lesson includes hands-on exercises using the UW-Madison salary data. Solutions are provided in collapsible sections within each lesson.
+
+### Part 1: Foundations
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [1. Setup](../lessons/01-setup.qmd#exercise) | Create PyCharm project and run first script |
+| [2. Syntax](../lessons/02-syntax.qmd#exercise) | Translate R snippets to Python |
+| [3. pandas Intro](../lessons/03-pandas-intro.qmd#exercise) | Load and explore salary data |
+| [4. Selection](../lessons/04-selection-filtering.qmd#exercise) | Filter salary data by multiple criteria |
+
+### Part 2: Data Transformation
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [5. Aggregation](../lessons/05-reshaping-aggregation.qmd#exercise) | Calculate median salaries and create pivot tables |
+| [6. Joining](../lessons/06-joining-merging.qmd#exercise) | Merge salary and job metadata |
+| [7. Dates](../lessons/07-dates-timeseries.qmd#exercise) | Analyze salary trends over time |
+| [8. Strings](../lessons/08-string-operations.qmd#exercise) | Clean division names |
+
+### Part 3: Financial Analysis
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [9. Inflation](../lessons/09-inflation-adjustment.qmd#exercise) | Calculate real salary changes |
+| [10. Compensation](../lessons/10-compensation-analysis.qmd#exercise) | Build peer comparison report |
+| [11. Workforce](../lessons/11-workforce-analytics.qmd#exercise) | Analyze FTE changes |
+| [12. Tracking](../lessons/12-tracking-individuals.qmd#exercise) | Employee journey analysis |
+
+### Part 4: Visualization
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [13. Plotly](../lessons/13-plotly-basics.qmd#exercise) | Create salary visualization suite |
+| [14. Dashboards](../lessons/14-interactive-dashboards.qmd#exercise) | Build salary explorer dashboard |
+
+### Part 5: Data Acquisition
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [15. APIs](../lessons/15-working-with-apis.qmd#exercise) | Build CPI data pipeline |
+| [16. Scraping](../lessons/16-web-scraping.qmd#exercise) | Scrape job descriptions |
+
+### Part 6: Production Patterns
+
+| Lesson | Exercise Topic |
+|--------|----------------|
+| [17. Pipelines](../lessons/17-reusable-pipelines.qmd#exercise) | Refactor code to module |
+| [18. Capstone](../lessons/18-capstone.qmd) | Complete analysis report |
+
+## Tips for Success
+
+1. **Try before looking** - Attempt each exercise before viewing the solution
+2. **Experiment** - Modify the exercises to explore related questions
+3. **Debug actively** - Use PyCharm's debugger to understand errors
+4. **Ask questions** - If something doesn't make sense, revisit earlier lessons

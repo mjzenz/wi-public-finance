@@ -1,0 +1,917 @@
+---
+title: "Peer Institution Comparison"
+subtitle: "Lesson 25"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Construct a peer institution framework using objective criteria (AAU, Big Ten, Carnegie classification)
+- Generate and structure simulated peer salary data for benchmarking
+- Apply cost-of-living adjustments using regional price parities
+- Calculate salary percentile rankings relative to peers
+- Build radar/spider charts comparing multiple compensation dimensions
+- Identify fields where competitive position is eroding
+- Create bump charts and Cleveland dot plots for peer rankings
+- Locate real-world data sources for institutional salary comparison
+:::
+
+## Introduction
+
+Salary data at a single institution only tells part of the story. To understand whether UW-Madison compensation is competitive, you need to benchmark against **peer institutions**---schools that compete for the same talent. This lesson builds a complete peer comparison workflow, from defining the peer group through visualization of competitive position.
+
+::: {.concept-box}
+#### What Makes a Good Peer Group?
+
+Peer groups should be constructed from institutions that genuinely compete for the same faculty and staff. Common criteria include:
+
+- **AAU Membership**: The Association of American Universities includes 71 leading research institutions. UW-Madison is a founding member.
+- **Big Ten Conference**: Athletic conference peers share geographic and cultural similarities, and frequently recruit from the same talent pool (Illinois, Michigan, Ohio State, Penn State, Minnesota, etc.)
+- **Carnegie Classification**: R1 (Very High Research Activity) institutions share similar research missions and faculty expectations.
+- **Research Expenditure**: NSF HERD survey rankings identify schools with comparable research portfolios (typically $800M+ for UW-Madison peers).
+- **State Flagship Status**: Other flagship state universities face similar public-sector compensation constraints.
+
+A good peer group balances **aspirational peers** (where you want to be) with **competitive peers** (who you actually lose candidates to). Most institutions use 10--15 peers for salary benchmarking.
+:::
+
+::: {.concept-box}
+#### The Politics and Strategy of Peer Selection
+
+Peer groups are as much **political** as they are analytical. Understanding the dynamics helps you build more effective analyses:
+
+**How peer groups are chosen (and contested)**:
+
+- At the UW System level, peer groups are established by the Board of Regents and reviewed periodically. UW-Madison's peers include other Big Ten and AAU flagship institutions.
+- **Aspirational peers** (e.g., Michigan, Berkeley) make the salary gap look larger, supporting arguments for more funding. **Regional peers** (e.g., Minnesota, Iowa) may show a smaller gap but represent the institutions you most directly compete with for talent.
+- Departments and colleges sometimes contest the institutional peer list, arguing that their discipline-specific labor market doesn't match the overall peers. A Computer Science department competes with Stanford and CMU for faculty regardless of the institutional peer list.
+
+**Key data sources for real peer comparisons**:
+
+- **AAUP Faculty Compensation Survey**: Annual data on faculty salaries by rank and institution type. The gold standard for faculty benchmarking.
+- **CUPA-HR Surveys**: Comprehensive data on staff and administrator compensation, with job-level matching.
+- **IPEDS (Integrated Postsecondary Education Data System)**: Free, publicly available data on faculty salaries, but less granular than AAUP or CUPA-HR.
+- **NSF HERD Survey**: Research expenditure data useful for identifying research-comparable peers.
+
+**Building a competitiveness narrative**: The most effective peer analyses tell a story: "UW-Madison faculty salaries ranked 8th among Big Ten peers in 2015 and have fallen to 12th by 2024. In the three fields where we've lost the most faculty (CS, Statistics, Finance), our salary percentile rank has dropped below the 25th percentile of peers." This narrative connects data to the decision: "We request a $3M targeted investment to restore competitiveness in our highest-attrition fields."
+
+When presenting peer data to the Board of Regents or legislative committees, always include cost-of-living adjustments (as taught in this lesson). Raw comparisons to California or New York peers are immediately discounted by decision-makers who know about cost differences. Adjusted comparisons are credible comparisons.
+:::
+
+## Setting Up and Generating Peer Data
+
+In practice you would pull from IPEDS, AAUP, or CUPA-HR. For this lesson we simulate realistic salary data for 10 Big Ten and peer AAU institutions.
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Wong colorblind-safe palette
+WONG = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
+        "#0072B2", "#D55E00", "#CC79A7"]
+
+np.random.seed(42)
+
+# Peer institutions with realistic salary multipliers relative to UW-Madison
+# Multiplier reflects overall faculty salary competitiveness
+peers = {
+    "UW-Madison":      {"multiplier": 1.00, "col_index": 0.95, "region": "Midwest"},
+    "U of Michigan":   {"multiplier": 1.12, "col_index": 0.97, "region": "Midwest"},
+    "Ohio State":      {"multiplier": 1.01, "col_index": 0.88, "region": "Midwest"},
+    "Penn State":      {"multiplier": 1.03, "col_index": 0.93, "region": "Northeast"},
+    "U of Minnesota":  {"multiplier": 0.98, "col_index": 0.96, "region": "Midwest"},
+    "U of Illinois":   {"multiplier": 1.05, "col_index": 0.91, "region": "Midwest"},
+    "Purdue":          {"multiplier": 0.96, "col_index": 0.87, "region": "Midwest"},
+    "Indiana":         {"multiplier": 0.93, "col_index": 0.86, "region": "Midwest"},
+    "U of Iowa":       {"multiplier": 0.94, "col_index": 0.88, "region": "Midwest"},
+    "Michigan State":  {"multiplier": 0.97, "col_index": 0.92, "region": "Midwest"},
+    "Northwestern":    {"multiplier": 1.22, "col_index": 1.05, "region": "Midwest"},
+}
+
+# UW-Madison baseline salaries by field (approximate medians)
+fields = {
+    "Business":         135000,
+    "Engineering":      125000,
+    "Computer Science": 140000,
+    "Medicine":         160000,
+    "Law":              145000,
+    "Biological Sci":   90000,
+    "Physical Sci":     95000,
+    "Social Sciences":  85000,
+    "Humanities":       75000,
+    "Education":        78000,
+}
+
+# Generate salary records for each institution and field
+records = []
+for inst, params in peers.items():
+    for field, base_salary in fields.items():
+        # Apply institution multiplier with field-specific noise
+        field_noise = np.random.normal(1.0, 0.04)
+        median_salary = base_salary * params["multiplier"] * field_noise
+
+        # Generate individual faculty salaries (n=30 per field per school)
+        n_faculty = 30
+        salaries = np.random.lognormal(
+            mean=np.log(median_salary) - 0.5 * 0.15**2,
+            sigma=0.15,
+            size=n_faculty
+        )
+        salaries = np.clip(salaries, 40000, 500000)
+
+        for sal in salaries:
+            records.append({
+                "institution": inst,
+                "field": field,
+                "salary": round(sal, 0),
+                "region": params["region"],
+                "col_index": params["col_index"],
+            })
+
+df = pd.DataFrame(records)
+print(f"Total records: {len(df):,}")
+print(f"Institutions: {df['institution'].nunique()}")
+print(f"Fields: {df['field'].nunique()}")
+print(f"\nMedian salary by institution:")
+print(df.groupby("institution")["salary"].median().sort_values(ascending=False).to_string())
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In R you might generate this data with `tidyverse`:
+
+```r
+library(tidyverse)
+
+peers <- tribble(
+  ~institution,     ~multiplier, ~col_index,
+  "UW-Madison",     1.00,        0.95,
+  "U of Michigan",  1.12,        0.97,
+  # ...
+)
+
+salary_data <- peers %>%
+  crossing(tibble(field = names(fields), base = unlist(fields))) %>%
+  rowwise() %>%
+  mutate(salary = rlnorm(1, log(base * multiplier), 0.15)) %>%
+  ungroup()
+```
+
+The `crossing()` function creates the full grid, similar to our nested Python loops.
+:::
+
+## Cost-of-Living Normalization
+
+Raw salary comparisons are misleading because $100,000 in Madison, WI buys more than $100,000 in Ann Arbor, MI or Evanston, IL. We adjust using **Regional Price Parities** (RPPs) or metro-area CPI-U indices.
+
+::: {.concept-box}
+#### Regional Price Parities (RPPs)
+
+The Bureau of Economic Analysis publishes RPPs that measure price-level differences across states and metro areas. An RPP of 95 means prices are 5% below the national average. Key facts:
+
+- **National average = 100**
+- Madison, WI metro area RPP is roughly 95 (cost of living 5% below national average)
+- The `col_index` in our data simulates RPPs divided by 100
+- **Adjusted salary = Nominal salary / COL index** normalizes to a common purchasing power basis
+- BEA publishes RPPs annually with a ~2 year lag
+
+Alternative sources: C2ER Cost of Living Index (quarterly, metro-level), ACCRA data.
+:::
+
+```{python}
+# Adjust salaries for cost of living
+# col_index < 1.0 means cheaper than national average
+# Dividing by col_index makes cheaper-area salaries look LARGER (more purchasing power)
+df["salary_adj"] = df["salary"] / df["col_index"]
+
+# Compare nominal vs adjusted medians
+comparison = df.groupby("institution").agg(
+    nominal_median=("salary", "median"),
+    adjusted_median=("salary_adj", "median"),
+    col_index=("col_index", "first")
+).sort_values("adjusted_median", ascending=False)
+
+comparison["rank_nominal"] = comparison["nominal_median"].rank(ascending=False).astype(int)
+comparison["rank_adjusted"] = comparison["adjusted_median"].rank(ascending=False).astype(int)
+comparison["rank_change"] = comparison["rank_nominal"] - comparison["rank_adjusted"]
+
+print("Nominal vs COL-Adjusted Median Salaries:")
+print(comparison[["nominal_median", "adjusted_median", "col_index",
+                   "rank_nominal", "rank_adjusted", "rank_change"]]
+      .round(0).to_string())
+```
+
+```{python}
+# Visualize the impact of COL adjustment
+fig = go.Figure()
+
+institutions = comparison.index.tolist()
+
+fig.add_trace(go.Bar(
+    x=institutions,
+    y=comparison["nominal_median"],
+    name="Nominal",
+    marker_color=WONG[4],
+    offsetgroup=0
+))
+
+fig.add_trace(go.Bar(
+    x=institutions,
+    y=comparison["adjusted_median"],
+    name="COL-Adjusted",
+    marker_color=WONG[2],
+    offsetgroup=1
+))
+
+fig.update_layout(
+    title="Nominal vs COL-Adjusted Median Faculty Salary",
+    yaxis_title="Median Salary ($)",
+    barmode="group",
+    xaxis_tickangle=-30,
+    legend=dict(x=0.75, y=0.95)
+)
+
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In R, `mutate()` with grouped operations makes this straightforward:
+
+```r
+salary_data <- salary_data %>%
+  mutate(salary_adj = salary / col_index)
+
+comparison <- salary_data %>%
+  group_by(institution) %>%
+  summarise(
+    nominal = median(salary),
+    adjusted = median(salary_adj)
+  ) %>%
+  mutate(
+    rank_nom = rank(-nominal),
+    rank_adj = rank(-adjusted)
+  )
+```
+:::
+
+## Salary Percentile Benchmarking
+
+Where does UW-Madison fall in the peer distribution for each field? Percentile ranking gives a direct answer.
+
+```{python}
+# Calculate UW-Madison percentile rank by field
+def percentile_rank(group, target="UW-Madison"):
+    """Where does the target institution's median fall among peers?"""
+    medians = group.groupby("institution")["salary_adj"].median()
+    target_median = medians.get(target, np.nan)
+    if pd.isna(target_median):
+        return np.nan
+    # Percentile: share of peers at or below target
+    rank = (medians <= target_median).sum() / len(medians) * 100
+    return round(rank, 1)
+
+field_percentiles = (
+    df.groupby("field")
+    .apply(percentile_rank, include_groups=False)
+    .reset_index()
+)
+field_percentiles.columns = ["field", "uw_percentile"]
+field_percentiles = field_percentiles.sort_values("uw_percentile")
+
+print("UW-Madison COL-Adjusted Salary Percentile Rank by Field:")
+print(field_percentiles.to_string(index=False))
+```
+
+```{python}
+# Cleveland dot plot: UW-Madison percentile by field
+fig = go.Figure()
+
+colors = [WONG[5] if p < 30 else WONG[0] if p < 50 else WONG[2]
+          for p in field_percentiles["uw_percentile"]]
+
+fig.add_trace(go.Scatter(
+    x=field_percentiles["uw_percentile"],
+    y=field_percentiles["field"],
+    mode="markers",
+    marker=dict(size=14, color=colors, line=dict(width=1, color="black")),
+    text=[f"{p}th percentile" for p in field_percentiles["uw_percentile"]],
+    hovertemplate="%{y}: %{text}<extra></extra>"
+))
+
+# Add reference lines
+fig.add_vline(x=50, line_dash="dash", line_color="gray",
+              annotation_text="Median", annotation_position="top")
+fig.add_vline(x=25, line_dash="dot", line_color=WONG[5],
+              annotation_text="25th", annotation_position="bottom")
+
+fig.update_layout(
+    title="UW-Madison Salary Percentile Among Peers (COL-Adjusted)",
+    xaxis_title="Percentile Rank",
+    xaxis=dict(range=[0, 105]),
+    yaxis_title="",
+    height=450,
+    showlegend=False
+)
+
+fig.show()
+```
+
+::: {.pycharm-tip}
+When building percentile calculations interactively in PyCharm, use the **Python Console** (Alt+F12) to test your `groupby().apply()` chains one step at a time. You can inspect intermediate DataFrames by selecting a variable and pressing Ctrl+Shift+Enter to evaluate it in the console.
+:::
+
+## Radar Charts: Multi-Dimensional Comparison
+
+Salary is not the only dimension. We can compare institutions across multiple metrics using radar (spider) charts.
+
+```{python}
+# Multi-dimensional institutional profiles (simulated index scores, 0-100)
+np.random.seed(123)
+
+dimensions = [
+    "Median Salary", "Benefits Value", "Research Funding",
+    "Teaching Load", "Cost of Living", "Quality of Life"
+]
+
+# Generate scores for a subset of peers
+radar_institutions = ["UW-Madison", "U of Michigan", "Ohio State",
+                      "U of Illinois", "Northwestern", "U of Minnesota"]
+
+profiles = {}
+base_scores = {
+    "UW-Madison":     [55, 70, 75, 65, 78, 82],
+    "U of Michigan":  [78, 72, 85, 60, 68, 70],
+    "Ohio State":     [60, 65, 70, 62, 80, 72],
+    "U of Illinois":  [65, 60, 72, 64, 82, 68],
+    "Northwestern":   [88, 75, 82, 55, 52, 65],
+    "U of Minnesota": [58, 68, 68, 66, 74, 75],
+}
+
+fig = go.Figure()
+
+for i, (inst, scores) in enumerate(base_scores.items()):
+    color = WONG[i % len(WONG)]
+    fig.add_trace(go.Scatterpolar(
+        r=scores + [scores[0]],  # Close the polygon
+        theta=dimensions + [dimensions[0]],
+        name=inst,
+        line=dict(color=color, width=2),
+        fill="toself" if inst == "UW-Madison" else "none",
+        opacity=0.7 if inst == "UW-Madison" else 0.9,
+    ))
+
+fig.update_layout(
+    polar=dict(
+        radialaxis=dict(visible=True, range=[0, 100]),
+    ),
+    title="Multi-Dimensional Institutional Comparison",
+    height=550,
+    legend=dict(x=1.05, y=1.0)
+)
+
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+R's `fmsb` package creates radar charts, or you can use `ggradar`:
+
+```r
+library(ggradar)
+
+profiles_df <- tibble(
+  group = names(base_scores),
+  `Median Salary` = c(55, 78, 60, 65, 88, 58) / 100,
+  `Benefits Value` = c(70, 72, 65, 60, 75, 68) / 100,
+  # ... normalize to 0-1
+)
+
+ggradar(profiles_df, grid.max = 1, grid.mid = 0.5)
+```
+
+Plotly's `Scatterpolar` is more interactive and handles the polygon closing automatically when you repeat the first point.
+:::
+
+## Competitive Position Analysis
+
+Which fields are we losing ground in? We can identify vulnerability by comparing UW-Madison's position to peers in specific disciplines.
+
+```{python}
+# Field-level comparison: UW-Madison vs peer medians
+uw_medians = (df[df["institution"] == "UW-Madison"]
+              .groupby("field")["salary_adj"].median())
+peer_medians = (df[df["institution"] != "UW-Madison"]
+                .groupby("field")["salary_adj"].median())
+
+competitive_gap = pd.DataFrame({
+    "uw_median": uw_medians,
+    "peer_median": peer_medians,
+}).dropna()
+
+competitive_gap["gap_pct"] = (
+    (competitive_gap["uw_median"] - competitive_gap["peer_median"])
+    / competitive_gap["peer_median"] * 100
+)
+competitive_gap = competitive_gap.sort_values("gap_pct")
+
+print("UW-Madison Salary Gap vs Peer Median (COL-Adjusted):")
+print("Negative = UW below peers\n")
+for field, row in competitive_gap.iterrows():
+    direction = "BELOW" if row["gap_pct"] < 0 else "ABOVE"
+    print(f"  {field:18s}: {row['gap_pct']:+.1f}% ({direction} peers)")
+```
+
+```{python}
+# Diverging bar chart of competitive gaps
+fig = go.Figure()
+
+colors = [WONG[5] if g < 0 else WONG[2] for g in competitive_gap["gap_pct"]]
+
+fig.add_trace(go.Bar(
+    x=competitive_gap["gap_pct"],
+    y=competitive_gap.index,
+    orientation="h",
+    marker_color=colors,
+    text=[f"{g:+.1f}%" for g in competitive_gap["gap_pct"]],
+    textposition="outside"
+))
+
+fig.add_vline(x=0, line_color="black", line_width=2)
+
+fig.update_layout(
+    title="UW-Madison Salary Gap vs Peer Median by Field (COL-Adjusted)",
+    xaxis_title="% Difference from Peer Median",
+    yaxis_title="",
+    height=450,
+    showlegend=False
+)
+
+fig.show()
+```
+
+::: {.concept-box}
+#### Interpreting Competitive Gaps
+
+- **Gaps below -5%**: High-risk fields where UW-Madison may struggle to recruit and retain. These warrant immediate attention in salary-setting.
+- **Gaps between -5% and +5%**: Roughly competitive. Monitor for trends.
+- **Gaps above +5%**: Areas of strength, but verify this is not driven by a few highly-paid outliers (check the full distribution, not just medians).
+- **Trend matters more than level**: A field that was at +3% last year and is now at -2% is more concerning than a field that has been stable at -4%.
+:::
+
+## Bump Charts and Peer Rankings Over Time
+
+Bump charts show how institutional rankings shift across years. We simulate a 5-year history to demonstrate the technique.
+
+```{python}
+# Simulate 5 years of median salary data for bump chart
+np.random.seed(99)
+years = [2020, 2021, 2022, 2023, 2024]
+bump_institutions = ["UW-Madison", "U of Michigan", "Ohio State", "Penn State",
+                     "U of Illinois", "Purdue", "Northwestern", "U of Minnesota"]
+
+# Starting medians (approximate, in thousands)
+starting_medians = {
+    "UW-Madison": 97, "U of Michigan": 110, "Ohio State": 99,
+    "Penn State": 100, "U of Illinois": 103, "Purdue": 94,
+    "Northwestern": 120, "U of Minnesota": 96
+}
+
+bump_records = []
+for inst in bump_institutions:
+    salary = starting_medians[inst]
+    for year in years:
+        # Annual growth with some randomness
+        growth = np.random.normal(0.025, 0.012)
+        salary = salary * (1 + growth)
+        bump_records.append({
+            "institution": inst,
+            "year": year,
+            "median_salary": round(salary * 1000, 0)
+        })
+
+bump_df = pd.DataFrame(bump_records)
+
+# Calculate ranks each year (1 = highest salary)
+bump_df["rank"] = (
+    bump_df.groupby("year")["median_salary"]
+    .rank(ascending=False, method="min")
+    .astype(int)
+)
+
+print("Salary Rankings by Year:")
+pivot = bump_df.pivot(index="institution", columns="year", values="rank")
+print(pivot.to_string())
+```
+
+```{python}
+# Bump chart using plotly
+fig = go.Figure()
+
+for i, inst in enumerate(bump_institutions):
+    inst_data = bump_df[bump_df["institution"] == inst]
+    color = WONG[i % len(WONG)]
+
+    is_uw = inst == "UW-Madison"
+
+    fig.add_trace(go.Scatter(
+        x=inst_data["year"],
+        y=inst_data["rank"],
+        mode="lines+markers+text",
+        name=inst,
+        line=dict(color=color, width=4 if is_uw else 2),
+        marker=dict(size=10 if is_uw else 7),
+        text=[inst if yr == 2024 else "" for yr in inst_data["year"]],
+        textposition="middle right",
+        textfont=dict(size=10),
+    ))
+
+fig.update_layout(
+    title="Faculty Salary Rankings Among Big Ten Peers (2020-2024)",
+    xaxis_title="Year",
+    yaxis_title="Rank (1 = Highest)",
+    yaxis=dict(autorange="reversed", dtick=1),
+    height=500,
+    showlegend=True,
+    legend=dict(x=0.01, y=0.99)
+)
+
+fig.show()
+```
+
+## Cleveland Dot Plots for Field-Level Rankings
+
+Cleveland dot plots effectively show where each institution stands in a particular field.
+
+```{python}
+# Cleveland dot plot: Compare all institutions in a single field
+target_field = "Computer Science"
+
+field_data = (df[df["field"] == target_field]
+              .groupby("institution")["salary_adj"]
+              .median()
+              .sort_values()
+              .reset_index())
+field_data.columns = ["institution", "median_adj"]
+
+fig = go.Figure()
+
+colors = [WONG[5] if inst == "UW-Madison" else WONG[4]
+          for inst in field_data["institution"]]
+sizes = [16 if inst == "UW-Madison" else 10
+         for inst in field_data["institution"]]
+
+fig.add_trace(go.Scatter(
+    x=field_data["median_adj"],
+    y=field_data["institution"],
+    mode="markers",
+    marker=dict(size=sizes, color=colors,
+                line=dict(width=1, color="black")),
+    hovertemplate="%{y}: $%{x:,.0f}<extra></extra>"
+))
+
+# Add a vertical line for the peer median
+peer_med = field_data["median_adj"].median()
+fig.add_vline(x=peer_med, line_dash="dash", line_color="gray",
+              annotation_text=f"Peer Median: ${peer_med:,.0f}",
+              annotation_position="top")
+
+fig.update_layout(
+    title=f"{target_field}: COL-Adjusted Median Salary by Institution",
+    xaxis_title="COL-Adjusted Median Salary ($)",
+    xaxis_tickformat="$,.0f",
+    yaxis_title="",
+    height=450,
+    showlegend=False
+)
+
+fig.show()
+```
+
+```{python}
+# Multi-field Cleveland dot plot: UW-Madison vs top peer in each field
+top_peer_comparison = []
+
+for field in fields:
+    field_medians = (df[df["field"] == field]
+                     .groupby("institution")["salary_adj"].median()
+                     .sort_values(ascending=False))
+
+    uw_val = field_medians.get("UW-Madison", np.nan)
+    top_inst = field_medians.index[0]
+    top_val = field_medians.iloc[0]
+
+    # Also get the peer average (excluding UW)
+    peer_avg = field_medians.drop("UW-Madison", errors="ignore").mean()
+
+    top_peer_comparison.append({
+        "field": field,
+        "uw_median": uw_val,
+        "top_institution": top_inst,
+        "top_median": top_val,
+        "peer_avg": peer_avg,
+    })
+
+tpc = pd.DataFrame(top_peer_comparison).sort_values("field")
+
+fig = go.Figure()
+
+# Peer average line segments
+for _, row in tpc.iterrows():
+    fig.add_trace(go.Scatter(
+        x=[row["uw_median"], row["peer_avg"]],
+        y=[row["field"], row["field"]],
+        mode="lines",
+        line=dict(color="lightgray", width=2),
+        showlegend=False,
+        hoverinfo="skip"
+    ))
+
+# UW-Madison dots
+fig.add_trace(go.Scatter(
+    x=tpc["uw_median"],
+    y=tpc["field"],
+    mode="markers",
+    name="UW-Madison",
+    marker=dict(size=12, color=WONG[5],
+                line=dict(width=1, color="black")),
+    hovertemplate="%{y}: $%{x:,.0f}<extra>UW-Madison</extra>"
+))
+
+# Peer average dots
+fig.add_trace(go.Scatter(
+    x=tpc["peer_avg"],
+    y=tpc["field"],
+    mode="markers",
+    name="Peer Average",
+    marker=dict(size=12, color=WONG[4], symbol="diamond",
+                line=dict(width=1, color="black")),
+    hovertemplate="%{y}: $%{x:,.0f}<extra>Peer Average</extra>"
+))
+
+fig.update_layout(
+    title="UW-Madison vs Peer Average by Field (COL-Adjusted)",
+    xaxis_title="COL-Adjusted Median Salary ($)",
+    xaxis_tickformat="$,.0f",
+    yaxis_title="",
+    height=500,
+    legend=dict(x=0.7, y=0.05)
+)
+
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+Cleveland dot plots are a strength of `ggplot2`:
+
+```r
+library(ggplot2)
+
+ggplot(tpc_long, aes(x = median_salary, y = field, color = source)) +
+  geom_point(size = 4) +
+  geom_line(aes(group = field), color = "gray80") +
+  scale_color_manual(values = c("UW-Madison" = "#D55E00", "Peer Avg" = "#0072B2")) +
+  theme_minimal() +
+  labs(title = "UW-Madison vs Peer Average by Field")
+```
+
+The `ggplot2` version handles the connected dot plot with `geom_line(aes(group = field))`, which is slightly more concise than the Plotly loop approach.
+:::
+
+## Data Sources for Real Peer Comparison
+
+::: {.concept-box}
+#### Real-World Data Sources
+
+When you move beyond simulated data, these sources provide actual peer salary information:
+
+| Source | Coverage | Access | Granularity |
+|--------|----------|--------|-------------|
+| **AAUP Faculty Compensation Survey** | ~900 institutions | Public summary, full via membership | Rank (Asst/Assoc/Full), institution |
+| **IPEDS** (Integrated Postsecondary Education Data System) | All Title IV institutions | Free (NCES website) | Faculty rank, 9/12-month, gender |
+| **CUPA-HR** (College & University Professional Association) | ~1,300 institutions | Membership required | Discipline, rank, admin roles |
+| **NSF HERD Survey** | ~900 institutions | Free (NCSES website) | Research expenditures by field |
+| **BLS Occupational Employment Statistics** | National/metro | Free (BLS website) | Occupation, not institution-specific |
+| **Chronicle of Higher Education** | Varies | Subscription | Faculty salary database |
+
+**Tips for working with real data:**
+
+- IPEDS is your best free starting point: download via the Data Center or use the `ipeds` Python package
+- AAUP publishes an annual report each April; full data tables are available to member institutions
+- CUPA-HR is the gold standard for discipline-level comparisons but requires institutional membership
+- Always check whether figures are 9-month or 12-month contracts (common source of error)
+- Watch for differences in benefit valuation methods across surveys
+:::
+
+```{python}
+#| eval: false
+
+# Example: Loading real IPEDS data (structure for reference)
+# Download from https://nces.ed.gov/ipeds/datacenter/
+
+# IPEDS salary data typically comes in this structure:
+ipeds_example = pd.DataFrame({
+    "unitid": [240444, 170976, 204796],          # IPEDS institution ID
+    "institution": ["UW-Madison", "U of Michigan", "Ohio State"],
+    "rank": ["Professor", "Professor", "Professor"],
+    "contract_length": ["9-month", "9-month", "9-month"],
+    "avg_salary": [132000, 155000, 128000],       # Average, not median
+    "num_faculty": [1250, 1100, 980],
+    "year": [2023, 2023, 2023],
+})
+
+# Convert 9-month to 12-month equivalent (common adjustment)
+ipeds_example["salary_12mo"] = ipeds_example["avg_salary"] * (12 / 9)
+
+# Merge with cost-of-living data
+# BEA Regional Price Parities: https://www.bea.gov/data/prices-inflation
+col_lookup = pd.DataFrame({
+    "institution": ["UW-Madison", "U of Michigan", "Ohio State"],
+    "rpp_index": [95.2, 97.1, 88.4],  # Metro-area RPP (national avg = 100)
+})
+
+merged = ipeds_example.merge(col_lookup, on="institution")
+merged["salary_adj"] = merged["avg_salary"] / (merged["rpp_index"] / 100)
+
+print(merged[["institution", "avg_salary", "rpp_index", "salary_adj"]])
+```
+
+::: {.pycharm-tip}
+When working with IPEDS downloads, the files often come as CSV with complex headers. Use PyCharm's **Database** tool window (View > Tool Windows > Database) to preview CSV files before loading them. You can also use `pd.read_csv(..., skiprows=N)` to skip metadata rows that IPEDS includes at the top of their files.
+:::
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 25: Peer Benchmarking Report
+
+Using the simulated peer data created in this lesson:
+
+1. Calculate the **overall rank** of UW-Madison (by COL-adjusted median salary) among the 11 institutions
+2. Identify the **three fields** where UW-Madison is furthest below the peer average (largest negative gap)
+3. Create a **grouped bar chart** showing UW-Madison vs the peer average for every field, sorted by gap size
+4. Build a **radar chart** comparing UW-Madison, the top-ranked peer, and the bottom-ranked peer across all 10 fields (use percentile scores scaled 0--100)
+5. Produce a **summary table** with columns: Field, UW Median, Peer Median, Gap %, UW Rank (out of 11)
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Overall rank
+overall_ranks = (df.groupby("institution")["salary_adj"]
+                 .median()
+                 .sort_values(ascending=False))
+uw_rank = (overall_ranks.rank(ascending=False)
+           .loc["UW-Madison"]
+           .astype(int))
+print(f"1. UW-Madison overall rank: {uw_rank} of {len(overall_ranks)}")
+print(f"   COL-adjusted median: ${overall_ranks['UW-Madison']:,.0f}\n")
+
+# 2. Three fields with largest negative gap
+field_gaps = []
+for field in fields:
+    field_subset = df[df["field"] == field]
+    uw_med = (field_subset[field_subset["institution"] == "UW-Madison"]
+              ["salary_adj"].median())
+    peer_med = (field_subset[field_subset["institution"] != "UW-Madison"]
+                ["salary_adj"].median())
+    gap = (uw_med - peer_med) / peer_med * 100
+
+    # Calculate UW rank within this field
+    field_ranks = (field_subset.groupby("institution")["salary_adj"]
+                   .median()
+                   .rank(ascending=False))
+    uw_field_rank = int(field_ranks.get("UW-Madison", np.nan))
+
+    field_gaps.append({
+        "field": field,
+        "uw_median": uw_med,
+        "peer_median": peer_med,
+        "gap_pct": gap,
+        "uw_rank": uw_field_rank,
+    })
+
+gaps_df = pd.DataFrame(field_gaps).sort_values("gap_pct")
+
+print("2. Three fields where UW-Madison is furthest below peers:")
+for _, row in gaps_df.head(3).iterrows():
+    print(f"   {row['field']}: {row['gap_pct']:+.1f}% (rank {row['uw_rank']} of 11)")
+
+# 3. Grouped bar chart: UW vs peer average by field
+gaps_sorted = gaps_df.sort_values("gap_pct")
+
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=gaps_sorted["field"],
+    y=gaps_sorted["uw_median"],
+    name="UW-Madison",
+    marker_color=WONG[5]
+))
+
+fig.add_trace(go.Bar(
+    x=gaps_sorted["field"],
+    y=gaps_sorted["peer_median"],
+    name="Peer Average",
+    marker_color=WONG[4]
+))
+
+fig.update_layout(
+    title="UW-Madison vs Peer Average Salary by Field (COL-Adjusted)",
+    yaxis_title="COL-Adjusted Median Salary ($)",
+    yaxis_tickformat="$,.0f",
+    barmode="group",
+    xaxis_tickangle=-30,
+    height=500,
+    legend=dict(x=0.75, y=0.95)
+)
+
+fig.show()
+
+# 4. Radar chart: UW vs top and bottom peers
+# Convert field medians to 0-100 percentile scores
+all_field_medians = (df.groupby(["institution", "field"])["salary_adj"]
+                     .median()
+                     .unstack())
+
+# Scale each field to 0-100 across institutions
+scaled = all_field_medians.apply(
+    lambda col: (col - col.min()) / (col.max() - col.min()) * 100, axis=0
+)
+
+# Identify top and bottom institutions by overall rank
+top_inst = overall_ranks.index[0]
+bottom_inst = overall_ranks.index[-1]
+radar_fields = list(fields.keys())
+
+fig = go.Figure()
+
+for inst, color, width in [
+    ("UW-Madison", WONG[5], 3),
+    (top_inst, WONG[2], 2),
+    (bottom_inst, WONG[0], 2)
+]:
+    scores = [scaled.loc[inst, f] for f in radar_fields]
+    scores.append(scores[0])  # Close polygon
+
+    fig.add_trace(go.Scatterpolar(
+        r=scores,
+        theta=radar_fields + [radar_fields[0]],
+        name=inst,
+        line=dict(color=color, width=width),
+        fill="toself" if inst == "UW-Madison" else "none",
+        opacity=0.6 if inst == "UW-Madison" else 0.9,
+    ))
+
+fig.update_layout(
+    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+    title=f"Field-Level Comparison: UW-Madison vs {top_inst} vs {bottom_inst}",
+    height=550,
+)
+
+fig.show()
+
+# 5. Summary table
+print("\n5. Summary Table:")
+print(f"{'Field':18s} {'UW Median':>12s} {'Peer Median':>12s} {'Gap %':>8s} {'UW Rank':>8s}")
+print("-" * 62)
+for _, row in gaps_df.sort_values("field").iterrows():
+    print(f"{row['field']:18s} ${row['uw_median']:>10,.0f} ${row['peer_median']:>10,.0f} "
+          f"{row['gap_pct']:>+7.1f}% {row['uw_rank']:>6d}/11")
+```
+:::
+:::
+
+## Summary
+
+In this lesson you built a complete peer institution comparison framework:
+
+- **Peer group selection**: Objective criteria (AAU, Big Ten, Carnegie, research expenditure) define meaningful comparison sets
+- **Simulated peer data**: `numpy` random generation creates realistic multi-institution datasets for development and testing
+- **Cost-of-living adjustment**: Regional Price Parities normalize salaries to purchasing-power equivalence, often reshuffling rankings
+- **Percentile benchmarking**: Quantifies exactly where UW-Madison falls in the peer distribution for each field
+- **Radar charts**: Compare institutions across multiple dimensions simultaneously (salary, benefits, research, quality of life)
+- **Competitive gap analysis**: Diverging bar charts highlight fields where UW-Madison is above or below peer norms
+- **Bump charts**: Track ranking changes over time to identify concerning trends
+- **Cleveland dot plots**: Clean comparison of institutions within a single field, or UW vs peer average across all fields
+- **Real data sources**: AAUP, IPEDS, and CUPA-HR provide actual peer salary data for production analyses
+
+Key takeaways:
+
+- Always adjust for cost of living before comparing---nominal rankings can be misleading
+- Percentile rank is more informative than simple averages for competitive positioning
+- Track trends over multiple years; a single year's snapshot misses trajectory
+- Fields with large negative gaps and downward trends represent the greatest retention risk
+
+## Next Steps
+
+Return to [Lesson 18: Capstone](18-capstone.qmd) to incorporate these advanced techniques into your final project.

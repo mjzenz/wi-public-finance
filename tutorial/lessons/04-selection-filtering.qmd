@@ -1,0 +1,494 @@
+---
+title: "Data Selection and Filtering"
+subtitle: "Lesson 4"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Use `.loc[]` and `.iloc[]` to select data by label and position
+- Filter DataFrames using boolean indexing
+- Apply multiple filter conditions with `&` and `|`
+- Use the `query()` method for SQL-like filtering
+- Chain operations using parentheses (Python's approach vs R's pipe)
+:::
+
+::: {.concept-box}
+#### Institutional Data Systems and Classification Codes
+
+Before filtering salary data, it helps to understand the classification systems that structure it. At UW and most public universities, employees are categorized using layered coding systems:
+
+- **Employee category**: Broad groups like Faculty, Academic Staff, University Staff, and Limited Appointees. These carry different governance rules, pay structures, and benefits.
+- **Job codes / title codes**: Each position maps to a standardized code (historically UFAS codes at UW, now transitioning to Workday job profiles). These determine salary ranges, required qualifications, and FLSA status.
+- **Division and department**: Organizational hierarchy matters — a "Professor" in the School of Medicine earns very differently from one in Letters & Science due to market differences.
+- **Appointment type**: Ongoing, fixed-term, acting, or interim appointments have different implications for analysis (e.g., should you include interim appointments in median salary calculations?).
+
+When filtering data, you're making **analytical design decisions**. Filtering to `employee_category == "Faculty"` excludes clinical faculty who may be coded differently. Filtering by division may split joint appointments. Always document your filter choices and their rationale — these decisions shape your findings as much as the statistics do.
+:::
+
+## Introduction
+
+Selecting and filtering data is fundamental to analysis. In R, you use `dplyr::filter()` and `dplyr::select()`. In pandas, you use `.loc[]`, `.iloc[]`, and boolean indexing. Let's explore these tools.
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Create sample salary data
+salary_data = {
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES",
+                  "DAVIS", "MILLER", "WILSON", "MOORE", "TAYLOR"],
+    "first_name": ["JOHN", "MARY", "JAMES", "PATRICIA", "ROBERT",
+                   "LINDA", "MICHAEL", "SARAH", "DAVID", "JENNIFER"],
+    "division": [
+        "College of Letters & Science", "School of Medicine and Public Health",
+        "College of Letters & Science", "College of Engineering", "School of Business",
+        "College of Letters & Science", "School of Medicine and Public Health",
+        "College of Engineering", "School of Business", "College of Letters & Science"
+    ],
+    "department": [
+        "Chemistry", "Internal Medicine", "English", "Computer Sciences", "Finance",
+        "Mathematics", "Pediatrics", "Mechanical Engineering", "Marketing", "History"
+    ],
+    "employee_category": [
+        "Faculty", "Faculty", "Faculty", "Faculty", "Academic Staff",
+        "Faculty", "Faculty", "Academic Staff", "Academic Staff", "Faculty"
+    ],
+    "salary": [125000, 185000, 95000, 175000, 65000, 78000, 145000, 92000, 71000, 88000],
+    "fte": [1.0, 1.0, 1.0, 0.75, 0.5, 1.0, 0.8, 1.0, 1.0, 0.9],
+    "years_employed": [14, 19, 4, 9, 6, 12, 15, 3, 8, 7]
+}
+
+df = pd.DataFrame(salary_data)
+df
+```
+
+## Selecting by Label with `.loc[]`
+
+`.loc[]` selects data by **label** (row index and column names):
+
+```{python}
+# Select a single row by index label
+df.loc[0]  # First row (index label is 0)
+```
+
+```{python}
+# Select multiple rows
+df.loc[0:3]  # Rows with labels 0, 1, 2, 3 (inclusive!)
+```
+
+::: {.callout-warning}
+#### Important Difference from Python Slicing
+With `.loc[]`, the end point **is inclusive**: `df.loc[0:3]` returns 4 rows (0, 1, 2, 3).
+
+This differs from standard Python slicing where the end is exclusive.
+:::
+
+### Selecting Rows and Columns Together
+
+```{python}
+# Select specific rows and columns
+df.loc[0:2, ["last_name", "salary"]]
+```
+
+```{python}
+# Select all rows, specific columns
+df.loc[:, ["last_name", "department", "salary"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+df %>%
+  slice(1:3) %>%
+  select(last_name, salary)
+
+# Base R
+df[1:3, c("last_name", "salary")]
+```
+:::
+
+## Selecting by Position with `.iloc[]`
+
+`.iloc[]` selects by **integer position** (like standard Python indexing):
+
+```{python}
+# First row (position 0)
+df.iloc[0]
+```
+
+```{python}
+# First 3 rows (positions 0, 1, 2 - end is exclusive)
+df.iloc[0:3]
+```
+
+```{python}
+# Specific rows and columns by position
+df.iloc[0:3, [0, 1, 5]]  # First 3 rows, columns at positions 0, 1, 5
+```
+
+### `.loc[]` vs `.iloc[]` Summary
+
+| Accessor | Selection Method | End Point | Example |
+|----------|------------------|-----------|---------|
+| `.loc[]` | By label | Inclusive | `df.loc[0:3]` → 4 rows |
+| `.iloc[]` | By position | Exclusive | `df.iloc[0:3]` → 3 rows |
+
+```{python}
+# Demonstration
+print(f"df.loc[0:3] returns {len(df.loc[0:3])} rows (inclusive)")
+print(f"df.iloc[0:3] returns {len(df.iloc[0:3])} rows (exclusive)")
+```
+
+## Boolean Indexing
+
+The most common way to filter data is with boolean conditions:
+
+```{python}
+# Create a boolean condition
+high_salary = df["salary"] > 100000
+print(high_salary)
+```
+
+```{python}
+# Use boolean series to filter
+df[high_salary]
+```
+
+```{python}
+# More commonly, combine in one line
+df[df["salary"] > 100000]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+df %>% filter(salary > 100000)
+
+# Base R
+df[df$salary > 100000, ]
+```
+:::
+
+### Common Comparison Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `==` | Equal to | `df["division"] == "Engineering"` |
+| `!=` | Not equal | `df["division"] != "Engineering"` |
+| `>` | Greater than | `df["salary"] > 100000` |
+| `>=` | Greater or equal | `df["years"] >= 10` |
+| `<` | Less than | `df["fte"] < 1.0` |
+| `<=` | Less or equal | `df["salary"] <= 80000` |
+
+```{python}
+# Filter to specific division
+df[df["division"] == "College of Letters & Science"]
+```
+
+```{python}
+# Filter to part-time employees
+df[df["fte"] < 1.0]
+```
+
+## Multiple Conditions
+
+Combine conditions with `&` (and) and `|` (or). **Important**: Wrap each condition in parentheses!
+
+```{python}
+# AND: Both conditions must be true
+faculty_high_salary = df[(df["employee_category"] == "Faculty") & (df["salary"] > 100000)]
+faculty_high_salary
+```
+
+```{python}
+# OR: Either condition can be true
+engineering_or_business = df[
+    (df["division"] == "College of Engineering") |
+    (df["division"] == "School of Business")
+]
+engineering_or_business
+```
+
+::: {.callout-warning}
+#### Parentheses Required!
+In pandas, `&` and `|` have higher precedence than comparison operators. Without parentheses, you'll get an error:
+
+```python
+# WRONG - will error
+df[df["salary"] > 100000 & df["fte"] == 1.0]
+
+# CORRECT
+df[(df["salary"] > 100000) & (df["fte"] == 1.0)]
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr - no parentheses needed with commas
+df %>% filter(employee_category == "Faculty", salary > 100000)
+
+# Or explicit AND
+df %>% filter(employee_category == "Faculty" & salary > 100000)
+
+# OR
+df %>% filter(division == "Engineering" | division == "Business")
+```
+:::
+
+### Negation with `~`
+
+Use `~` to negate a boolean condition:
+
+```{python}
+# NOT faculty (i.e., staff)
+non_faculty = df[~(df["employee_category"] == "Faculty")]
+non_faculty
+```
+
+### Using `.isin()` for Multiple Values
+
+```{python}
+# Filter to specific divisions
+target_divisions = ["College of Engineering", "School of Business"]
+df[df["division"].isin(target_divisions)]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+df %>% filter(division %in% c("Engineering", "Business"))
+```
+:::
+
+## The `query()` Method
+
+For complex filters, `query()` provides a SQL-like syntax that's often more readable:
+
+```{python}
+# Using query() - note the string syntax
+df.query("salary > 100000")
+```
+
+```{python}
+# Multiple conditions
+df.query("salary > 100000 and fte == 1.0")
+```
+
+```{python}
+# String matching (note the backticks for column names with spaces)
+df.query("employee_category == 'Faculty' and years_employed > 10")
+```
+
+### Advantages of `query()`
+
+1. More readable for complex conditions
+2. No parentheses needed around each condition
+3. Can reference external variables with `@`
+
+```{python}
+# Using external variable
+min_salary = 90000
+df.query("salary >= @min_salary")
+```
+
+::: {.pycharm-tip}
+PyCharm provides syntax highlighting inside `query()` strings if you use the pandas plugin. This helps catch typos in column names.
+:::
+
+## Combining Selection and Filtering
+
+You can chain operations using `.loc[]` with boolean conditions:
+
+```{python}
+# Filter rows AND select columns in one operation
+df.loc[df["salary"] > 100000, ["last_name", "department", "salary"]]
+```
+
+```{python}
+# Complex filter with column selection
+df.loc[
+    (df["employee_category"] == "Faculty") & (df["years_employed"] >= 10),
+    ["last_name", "department", "salary", "years_employed"]
+]
+```
+
+## Method Chaining (Python's Pipe Alternative)
+
+R users love the pipe (`%>%`). Python doesn't have a built-in pipe, but you can chain methods using parentheses:
+
+```{python}
+# Method chaining with parentheses for line breaks
+result = (
+    df
+    .query("employee_category == 'Faculty'")
+    .loc[:, ["last_name", "division", "salary"]]
+    .sort_values("salary", ascending=False)
+    .head(5)
+)
+result
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Equivalent with tidyverse pipe
+df %>%
+  filter(employee_category == "Faculty") %>%
+  select(last_name, division, salary) %>%
+  arrange(desc(salary)) %>%
+  head(5)
+```
+:::
+
+### The `.pipe()` Method
+
+For more complex operations, pandas has `.pipe()`:
+
+```{python}
+def add_salary_rank(dataframe):
+    """Add a salary rank column."""
+    dataframe = dataframe.copy()
+    dataframe["salary_rank"] = dataframe["salary"].rank(ascending=False)
+    return dataframe
+
+result = (
+    df
+    .query("employee_category == 'Faculty'")
+    .pipe(add_salary_rank)
+    .sort_values("salary_rank")
+)
+result[["last_name", "salary", "salary_rank"]]
+```
+
+## Selecting Rows by String Patterns
+
+Use `.str` accessor methods for string-based filtering:
+
+```{python}
+# Department contains "Medicine"
+df[df["department"].str.contains("Medicine")]
+```
+
+```{python}
+# Last name starts with "M"
+df[df["last_name"].str.startswith("M")]
+```
+
+```{python}
+# Case-insensitive contains
+df[df["division"].str.contains("engineering", case=False)]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# stringr approach
+df %>% filter(str_detect(department, "Medicine"))
+df %>% filter(str_starts(last_name, "M"))
+```
+:::
+
+## Quick Reference
+
+| Task | pandas | dplyr |
+|------|--------|-------|
+| Filter rows | `df[df["col"] > x]` | `filter(df, col > x)` |
+| Select columns | `df[["a", "b"]]` | `select(df, a, b)` |
+| Both | `df.loc[condition, cols]` | `filter() %>% select()` |
+| AND | `(cond1) & (cond2)` | `cond1, cond2` or `&` |
+| OR | `(cond1) \| (cond2)` | `cond1 \| cond2` |
+| NOT | `~condition` | `!condition` |
+| In list | `col.isin(list)` | `col %in% list` |
+| Contains string | `col.str.contains("x")` | `str_detect(col, "x")` |
+| SQL-like filter | `df.query("col > x")` | N/A (use filter) |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 4: Filtering Salary Data
+
+Using the sample salary data:
+
+1. Filter to employees in the "College of Letters & Science" division
+2. Filter to Faculty with salary > $100,000
+3. Filter to part-time employees (FTE < 1.0) in any division
+4. Filter to employees hired in the last 5 years (years_employed <= 5)
+5. Use `query()` to find Faculty in Medicine or Engineering divisions with salary > $150,000
+6. Select only last_name, department, and salary for employees whose department contains "Science"
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Filter to College of Letters & Science
+print("1. Letters & Science employees:")
+ls_employees = df[df["division"] == "College of Letters & Science"]
+print(ls_employees[["last_name", "department"]])
+
+# 2. Faculty with salary > $100,000
+print("\n2. High-earning Faculty:")
+high_faculty = df[(df["employee_category"] == "Faculty") & (df["salary"] > 100000)]
+print(high_faculty[["last_name", "salary"]])
+
+# 3. Part-time employees
+print("\n3. Part-time employees:")
+part_time = df[df["fte"] < 1.0]
+print(part_time[["last_name", "fte", "salary"]])
+
+# 4. Recently hired (5 years or less)
+print("\n4. Recently hired:")
+recent = df[df["years_employed"] <= 5]
+print(recent[["last_name", "years_employed"]])
+
+# 5. Faculty in Medicine or Engineering, salary > $150k
+print("\n5. High-earning Faculty in Medicine/Engineering:")
+result = df.query(
+    "employee_category == 'Faculty' and "
+    "(division.str.contains('Medicine') or division.str.contains('Engineering')) and "
+    "salary > 150000"
+)
+print(result[["last_name", "division", "salary"]])
+
+# 6. Departments containing "Science"
+print("\n6. Science departments:")
+science_depts = df.loc[
+    df["department"].str.contains("Science"),
+    ["last_name", "department", "salary"]
+]
+print(science_depts)
+```
+:::
+:::
+
+## Summary
+
+You've learned to filter and select data in pandas:
+
+- **`.loc[]`**: Select by label (row/column names), end is inclusive
+- **`.iloc[]`**: Select by position (integers), end is exclusive
+- **Boolean indexing**: `df[df["col"] > value]`
+- **Multiple conditions**: Use `&` and `|` with parentheses around each condition
+- **`query()`**: SQL-like syntax for complex filters
+- **Method chaining**: Use parentheses for multi-line operations
+
+The key differences from R:
+- Must use parentheses around conditions with `&` and `|`
+- `.loc[]` end is inclusive (unlike Python slicing)
+- No built-in pipe, but method chaining achieves the same result
+
+## Next Steps
+
+Continue to [Lesson 5: Reshaping and Aggregation](05-reshaping-aggregation.qmd) to learn about `groupby()`, `pivot_table()`, and other data transformation operations.

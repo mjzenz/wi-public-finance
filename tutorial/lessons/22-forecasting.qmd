@@ -1,0 +1,908 @@
+---
+title: "Forecasting and Trend Modeling"
+subtitle: "Lesson 22"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Fit linear and polynomial trend models to historical salary data
+- Project future salary costs using numpy and statsmodels
+- Build Monte Carlo simulations for budget planning under uncertainty
+- Create scenario models for policy decisions (inflation, across-the-board raises)
+- Calculate and interpret confidence intervals on projections
+- Visualize forecast uncertainty with fan charts
+- Recognize the limitations and risks of extrapolation
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Why Forecast Salary Costs?
+
+University budget offices must plan 2-5 years ahead. Salary and fringe benefits typically account for 70-80% of operating budgets. Forecasting helps answer critical questions:
+
+- **Budget requests**: "How much will we need for salaries next fiscal year?"
+- **Policy modeling**: "What does a 3% across-the-board raise cost over 5 years?"
+- **Risk assessment**: "What is the range of plausible salary expenditures if inflation varies?"
+
+Forecasting is not prediction --- it is structured reasoning about possible futures.
+:::
+
+::: {.concept-box}
+#### Budget Requests and Scenario Planning
+
+In public higher education, forecasts don't just inform internal planning — they're the foundation of **budget requests** to the state:
+
+**The biennial budget process (Wisconsin)**:
+
+- UW System submits a biennial budget request to the Governor ~18 months before the biennium begins
+- The request includes a **base budget** (continuing current operations) and **decision items** (new funding requests)
+- Salary and fringe benefit projections are the largest component of the base budget
+- The Governor's budget office and Joint Finance Committee scrutinize these projections — credible forecasting methodology matters
+
+**Why multiple scenarios are essential**:
+
+- **Legislative audiences** distrust single-point estimates. Presenting a range (conservative, baseline, aggressive) demonstrates analytical rigor and lets decision-makers choose their risk tolerance.
+- **Base scenario**: Assumes current pay plan continues, no new positions, historical attrition rates
+- **Investment scenario**: Models the cost of competitive raises, strategic hires, or equity adjustments — this is your "ask"
+- **Austerity scenario**: Models budget cuts, hiring freezes, or furloughs — this is your contingency plan
+
+**Connecting forecasts to decisions**: A forecast showing that "salary costs will grow 4% annually while state appropriations grow 1%" is powerful because it quantifies the structural deficit. Adding "under the investment scenario, a one-time $5M equity pool would close 60% of the peer salary gap" turns a forecast into a budget request with a specific dollar amount and measurable outcome.
+
+The Monte Carlo simulation techniques in this lesson let you attach **probability ranges** to each scenario, making your projections more credible and useful to decision-makers.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Wong colorblind-safe palette
+WONG = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]
+```
+
+## Generating Historical Salary Trend Data
+
+We will build a realistic multi-year dataset of aggregate salary costs for several divisions, reflecting the kinds of trends you would see in UW-Madison data.
+
+```{python}
+np.random.seed(42)
+
+years = np.arange(2015, 2026)
+n_years = len(years)
+
+# Base costs in millions for each division
+divisions = {
+    "L&S": {"base": 320, "annual_growth": 0.028, "volatility": 0.008},
+    "Medicine": {"base": 280, "annual_growth": 0.035, "volatility": 0.012},
+    "Engineering": {"base": 150, "annual_growth": 0.032, "volatility": 0.010},
+    "Business": {"base": 85, "annual_growth": 0.030, "volatility": 0.009},
+    "Education": {"base": 65, "annual_growth": 0.022, "volatility": 0.007},
+}
+
+records = []
+for div, params in divisions.items():
+    cost = params["base"]
+    for i, year in enumerate(years):
+        # Growth with some noise
+        if i > 0:
+            growth = params["annual_growth"] + np.random.normal(0, params["volatility"])
+            cost = cost * (1 + growth)
+        records.append({
+            "division": div,
+            "year": year,
+            "total_salary_millions": round(cost, 2)
+        })
+
+df = pd.DataFrame(records)
+print(f"Historical salary data: {len(df)} rows, {df['year'].nunique()} years")
+print(df.pivot_table(index="year", columns="division", values="total_salary_millions").round(1))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Generating similar trend data in R
+library(dplyr)
+library(tidyr)
+
+set.seed(42)
+years <- 2015:2025
+divisions <- list(
+  "L&S" = list(base = 320, growth = 0.028, vol = 0.008),
+  "Medicine" = list(base = 280, growth = 0.035, vol = 0.012)
+)
+
+# R approach using purrr or a for loop
+df <- purrr::map_dfr(names(divisions), function(div) {
+  params <- divisions[[div]]
+  cost <- params$base
+  tibble(year = years) %>%
+    mutate(
+      growth = c(0, rnorm(length(years) - 1, params$growth, params$vol)),
+      total = params$base * cumprod(1 + growth),
+      division = div
+    )
+})
+```
+:::
+
+## Linear Trend Modeling with NumPy
+
+The simplest forecast fits a line through historical data and extends it. `np.polyfit` estimates the slope and intercept using ordinary least squares.
+
+```{python}
+# Focus on university-wide total
+totals = df.groupby("year")["total_salary_millions"].sum().reset_index()
+totals.columns = ["year", "total"]
+
+print("University-wide total salary costs (millions):")
+print(totals.to_string(index=False))
+
+# Fit a linear trend
+coeffs = np.polyfit(totals["year"], totals["total"], 1)
+slope, intercept = coeffs
+print(f"\nLinear trend: {slope:.2f}M per year")
+print(f"Intercept: {intercept:.2f}")
+
+# Project forward 5 years
+future_years = np.arange(2026, 2031)
+projected = np.polyval(coeffs, future_years)
+
+# Combine for plotting
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=totals["year"], y=totals["total"],
+    mode="markers+lines", name="Historical",
+    marker=dict(color=WONG[4], size=8),
+    line=dict(color=WONG[4], width=2)
+))
+
+fig.add_trace(go.Scatter(
+    x=future_years, y=projected,
+    mode="markers+lines", name="Linear Projection",
+    marker=dict(color=WONG[5], size=8, symbol="diamond"),
+    line=dict(color=WONG[5], width=2, dash="dash")
+))
+
+# Trend line over full range
+all_years = np.arange(2015, 2031)
+fig.add_trace(go.Scatter(
+    x=all_years, y=np.polyval(coeffs, all_years),
+    mode="lines", name="Trend Line",
+    line=dict(color=WONG[0], width=1, dash="dot")
+))
+
+fig.update_layout(
+    title="University-Wide Salary Costs: Linear Projection",
+    xaxis_title="Year",
+    yaxis_title="Total Salary Cost ($M)",
+    height=450
+)
+fig.show()
+```
+
+### Polynomial and Exponential Trends
+
+Salary growth is typically compounding, not linear. A quadratic or exponential model may fit better.
+
+```{python}
+# Quadratic fit
+coeffs_quad = np.polyfit(totals["year"], totals["total"], 2)
+projected_quad = np.polyval(coeffs_quad, future_years)
+
+# Exponential fit via log-linear regression
+log_totals = np.log(totals["total"])
+coeffs_exp = np.polyfit(totals["year"], log_totals, 1)
+projected_exp = np.exp(np.polyval(coeffs_exp, future_years))
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=totals["year"], y=totals["total"],
+    mode="markers+lines", name="Historical",
+    marker=dict(color=WONG[4], size=8),
+    line=dict(color=WONG[4], width=2)
+))
+
+for name, proj, color in [
+    ("Linear", projected, WONG[0]),
+    ("Quadratic", projected_quad, WONG[2]),
+    ("Exponential", projected_exp, WONG[5])
+]:
+    fig.add_trace(go.Scatter(
+        x=future_years, y=proj,
+        mode="lines+markers", name=name,
+        line=dict(color=color, width=2, dash="dash"),
+        marker=dict(size=6)
+    ))
+
+fig.update_layout(
+    title="Comparing Trend Models for Salary Projections",
+    xaxis_title="Year", yaxis_title="Total Salary Cost ($M)",
+    height=450
+)
+fig.show()
+
+print("Projected 2030 costs by model:")
+print(f"  Linear:      ${projected[-1]:,.1f}M")
+print(f"  Quadratic:   ${projected_quad[-1]:,.1f}M")
+print(f"  Exponential: ${projected_exp[-1]:,.1f}M")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Linear model in R
+model <- lm(total ~ year, data = totals)
+predict(model, newdata = data.frame(year = 2026:2030))
+
+# Exponential model
+model_exp <- lm(log(total) ~ year, data = totals)
+exp(predict(model_exp, newdata = data.frame(year = 2026:2030)))
+```
+:::
+
+## Regression with statsmodels
+
+For richer diagnostics --- R-squared, p-values, confidence intervals --- use `statsmodels`, the Python equivalent of R's `lm()`.
+
+```{python}
+#| eval: false
+import statsmodels.api as sm
+
+X = sm.add_constant(totals["year"])
+model = sm.OLS(totals["total"], X).fit()
+
+print(model.summary())
+```
+
+```{python}
+import statsmodels.api as sm
+
+X = sm.add_constant(totals["year"])
+model = sm.OLS(totals["total"], X).fit()
+
+# Key diagnostics
+print(f"R-squared: {model.rsquared:.4f}")
+print(f"Slope:     {model.params.iloc[1]:.2f}M per year (p={model.pvalues.iloc[1]:.4f})")
+print(f"Intercept: {model.params.iloc[0]:.2f}")
+
+# Prediction with confidence intervals
+X_future = sm.add_constant(future_years)
+predictions = model.get_prediction(X_future)
+pred_summary = predictions.summary_frame(alpha=0.05)
+
+print("\nProjections with 95% confidence intervals:")
+for i, year in enumerate(future_years):
+    row = pred_summary.iloc[i]
+    print(f"  {year}: ${row['mean']:,.1f}M  "
+          f"[${row['mean_ci_lower']:,.1f}M - ${row['mean_ci_upper']:,.1f}M]")
+```
+
+::: {.concept-box}
+#### Confidence vs Prediction Intervals
+
+- **Confidence interval** (mean_ci): Range for the *average* outcome. Narrow --- captures uncertainty in the regression line itself.
+- **Prediction interval** (obs_ci): Range for a *single future observation*. Wider --- also captures year-to-year randomness.
+
+For budget planning, prediction intervals are more realistic because they account for the variability you actually experience each year.
+:::
+
+```{python}
+# Visualize confidence and prediction intervals
+fig = go.Figure()
+
+# Historical
+fig.add_trace(go.Scatter(
+    x=totals["year"], y=totals["total"],
+    mode="markers+lines", name="Historical",
+    marker=dict(color=WONG[4], size=8),
+    line=dict(color=WONG[4], width=2)
+))
+
+# Prediction interval (wider)
+fig.add_trace(go.Scatter(
+    x=np.concatenate([future_years, future_years[::-1]]),
+    y=np.concatenate([pred_summary["obs_ci_upper"], pred_summary["obs_ci_lower"][::-1]]),
+    fill="toself", fillcolor="rgba(86,180,233,0.15)",
+    line=dict(color="rgba(0,0,0,0)"),
+    name="95% Prediction Interval"
+))
+
+# Confidence interval (narrower)
+fig.add_trace(go.Scatter(
+    x=np.concatenate([future_years, future_years[::-1]]),
+    y=np.concatenate([pred_summary["mean_ci_upper"], pred_summary["mean_ci_lower"][::-1]]),
+    fill="toself", fillcolor="rgba(86,180,233,0.35)",
+    line=dict(color="rgba(0,0,0,0)"),
+    name="95% Confidence Interval"
+))
+
+# Point forecast
+fig.add_trace(go.Scatter(
+    x=future_years, y=pred_summary["mean"],
+    mode="lines+markers", name="Forecast",
+    line=dict(color=WONG[5], width=2, dash="dash"),
+    marker=dict(color=WONG[5], size=7)
+))
+
+fig.update_layout(
+    title="Salary Projection with Confidence and Prediction Intervals",
+    xaxis_title="Year", yaxis_title="Total Salary Cost ($M)",
+    height=475
+)
+fig.show()
+```
+
+## Monte Carlo Simulation for Budget Planning
+
+::: {.concept-box}
+#### What is Monte Carlo Simulation?
+
+Monte Carlo simulation generates thousands of possible futures by randomly sampling from assumed distributions. Instead of one projection, you get a *distribution* of outcomes. This reveals:
+
+- The range of plausible costs
+- The probability that costs exceed a threshold
+- Which assumptions matter most
+:::
+
+```{python}
+np.random.seed(123)
+
+n_simulations = 5000
+n_forecast_years = 5
+current_cost = totals["total"].iloc[-1]
+
+# Historical growth rate statistics
+hist_growth = totals["total"].pct_change().dropna()
+mean_growth = hist_growth.mean()
+std_growth = hist_growth.std()
+
+print(f"Historical annual growth: {mean_growth:.3f} ({mean_growth*100:.1f}%)")
+print(f"Growth std deviation:     {std_growth:.3f} ({std_growth*100:.1f}%)")
+print(f"Current cost (2025):      ${current_cost:,.1f}M")
+
+# Run simulations
+simulations = np.zeros((n_simulations, n_forecast_years))
+for sim in range(n_simulations):
+    cost = current_cost
+    for yr in range(n_forecast_years):
+        growth = np.random.normal(mean_growth, std_growth)
+        cost = cost * (1 + growth)
+        simulations[sim, yr] = cost
+
+# Summary statistics
+sim_df = pd.DataFrame(simulations, columns=[str(y) for y in range(2026, 2031)])
+print("\nMonte Carlo Results (Total Salary Cost, $M):")
+print(sim_df.describe(percentiles=[0.05, 0.25, 0.5, 0.75, 0.95]).round(1))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Monte Carlo in R
+set.seed(123)
+n_sims <- 5000
+current_cost <- tail(totals$total, 1)
+mean_g <- mean(diff(totals$total) / head(totals$total, -1))
+sd_g <- sd(diff(totals$total) / head(totals$total, -1))
+
+sims <- matrix(NA, n_sims, 5)
+for (s in 1:n_sims) {
+  cost <- current_cost
+  for (yr in 1:5) {
+    cost <- cost * (1 + rnorm(1, mean_g, sd_g))
+    sims[s, yr] <- cost
+  }
+}
+apply(sims, 2, quantile, probs = c(0.05, 0.5, 0.95))
+```
+:::
+
+### Visualizing Monte Carlo Results
+
+```{python}
+# Plot a sample of simulation paths plus percentile bands
+fig = go.Figure()
+
+# Historical line
+fig.add_trace(go.Scatter(
+    x=totals["year"].tolist(), y=totals["total"].tolist(),
+    mode="lines+markers", name="Historical",
+    line=dict(color=WONG[4], width=2),
+    marker=dict(size=6)
+))
+
+forecast_years = list(range(2026, 2031))
+
+# Plot 100 sample paths (semi-transparent)
+for i in range(100):
+    fig.add_trace(go.Scatter(
+        x=forecast_years, y=simulations[i, :],
+        mode="lines", line=dict(color="rgba(204,121,167,0.08)", width=1),
+        showlegend=False, hoverinfo="skip"
+    ))
+
+# Percentile bands
+p05 = np.percentile(simulations, 5, axis=0)
+p25 = np.percentile(simulations, 25, axis=0)
+p50 = np.percentile(simulations, 50, axis=0)
+p75 = np.percentile(simulations, 75, axis=0)
+p95 = np.percentile(simulations, 95, axis=0)
+
+# 90% band (5th-95th)
+fig.add_trace(go.Scatter(
+    x=forecast_years + forecast_years[::-1],
+    y=p95.tolist() + p05[::-1].tolist(),
+    fill="toself", fillcolor="rgba(230,159,0,0.15)",
+    line=dict(color="rgba(0,0,0,0)"),
+    name="90% Range"
+))
+
+# 50% band (25th-75th)
+fig.add_trace(go.Scatter(
+    x=forecast_years + forecast_years[::-1],
+    y=p75.tolist() + p25[::-1].tolist(),
+    fill="toself", fillcolor="rgba(230,159,0,0.35)",
+    line=dict(color="rgba(0,0,0,0)"),
+    name="50% Range"
+))
+
+# Median projection
+fig.add_trace(go.Scatter(
+    x=forecast_years, y=p50.tolist(),
+    mode="lines", name="Median Projection",
+    line=dict(color=WONG[5], width=2.5, dash="dash")
+))
+
+fig.update_layout(
+    title="Monte Carlo Salary Cost Forecast (5,000 Simulations)",
+    xaxis_title="Year", yaxis_title="Total Salary Cost ($M)",
+    height=500
+)
+fig.show()
+```
+
+### Budget Threshold Analysis
+
+```{python}
+# What is the probability that 2028 costs exceed $1,100M?
+threshold = 1100
+year_idx = 2  # 2028 is index 2 (2026=0, 2027=1, 2028=2)
+prob_exceed = (simulations[:, year_idx] > threshold).mean() * 100
+
+print(f"P(2028 costs > ${threshold:,}M) = {prob_exceed:.1f}%")
+
+# Probability table for multiple thresholds
+print("\nProbability of exceeding cost thresholds:")
+print(f"{'Year':<8}", end="")
+for t in [1050, 1100, 1150, 1200]:
+    print(f"  >${t}M", end="")
+print()
+
+for yr_idx, yr in enumerate(forecast_years):
+    print(f"{yr:<8}", end="")
+    for t in [1050, 1100, 1150, 1200]:
+        prob = (simulations[:, yr_idx] > t).mean() * 100
+        print(f"  {prob:5.1f}%", end="")
+    print()
+```
+
+## Scenario Modeling
+
+Scenario modeling answers "what if" questions by changing assumptions explicitly rather than sampling randomly.
+
+```{python}
+# Define scenarios
+scenarios = {
+    "Baseline (historical avg)": {"growth": mean_growth},
+    "Low inflation (2%)": {"growth": 0.020},
+    "High inflation (4%)": {"growth": 0.040},
+    "3% ATB raise": {"growth": 0.030},
+    "Wage freeze": {"growth": 0.005},
+    "Aggressive hiring (5%)": {"growth": 0.050},
+}
+
+fig = go.Figure()
+
+# Historical
+fig.add_trace(go.Scatter(
+    x=totals["year"].tolist(), y=totals["total"].tolist(),
+    mode="lines+markers", name="Historical",
+    line=dict(color="black", width=2),
+    marker=dict(size=6, color="black")
+))
+
+for i, (name, params) in enumerate(scenarios.items()):
+    projected = [current_cost]
+    for yr in range(n_forecast_years):
+        projected.append(projected[-1] * (1 + params["growth"]))
+
+    color = WONG[i % len(WONG)]
+    fig.add_trace(go.Scatter(
+        x=[2025] + forecast_years, y=projected,
+        mode="lines+markers", name=name,
+        line=dict(color=color, width=2, dash="dash"),
+        marker=dict(size=5)
+    ))
+
+fig.update_layout(
+    title="Scenario Analysis: Salary Cost Trajectories",
+    xaxis_title="Year", yaxis_title="Total Salary Cost ($M)",
+    height=500, legend=dict(x=0.02, y=0.98)
+)
+fig.show()
+
+# Summary table
+print("Projected 2030 Total Salary Cost by Scenario:")
+print("=" * 55)
+for name, params in scenarios.items():
+    cost_2030 = current_cost * (1 + params["growth"]) ** 5
+    increase = cost_2030 - current_cost
+    print(f"  {name:30s}: ${cost_2030:,.1f}M  (+${increase:,.1f}M)")
+```
+
+::: {.pycharm-tip}
+#### PyCharm: Comparing Scenario Runs
+
+Use PyCharm's **Scientific Mode** to run scenario analyses interactively. You can modify growth assumptions in the Python console and immediately see updated projections in the built-in plot viewer --- without rerunning the entire notebook.
+:::
+
+## Fan Charts for Communicating Uncertainty
+
+::: {.concept-box}
+#### Fan Charts
+
+A **fan chart** displays a central projection surrounded by shaded bands representing different probability levels. The Bank of England popularized this format for inflation forecasts. Each band covers a progressively wider interval (e.g., 10%, 30%, 50%, 70%, 90%), creating a "fan" shape that widens into the future.
+
+Fan charts honestly communicate that uncertainty grows over time.
+:::
+
+```{python}
+# Build fan chart from Monte Carlo results
+fig = go.Figure()
+
+# Historical
+fig.add_trace(go.Scatter(
+    x=totals["year"].tolist(), y=totals["total"].tolist(),
+    mode="lines+markers", name="Historical",
+    line=dict(color="black", width=2),
+    marker=dict(size=6, color="black")
+))
+
+# Fan bands: 90%, 70%, 50%, 30%, 10%
+bands = [
+    (5, 95, "rgba(0,114,178,0.10)", "90% interval"),
+    (15, 85, "rgba(0,114,178,0.18)", "70% interval"),
+    (25, 75, "rgba(0,114,178,0.28)", "50% interval"),
+    (35, 65, "rgba(0,114,178,0.40)", "30% interval"),
+    (45, 55, "rgba(0,114,178,0.55)", "10% interval"),
+]
+
+for lo_pct, hi_pct, color, label in bands:
+    lo = np.percentile(simulations, lo_pct, axis=0)
+    hi = np.percentile(simulations, hi_pct, axis=0)
+
+    fig.add_trace(go.Scatter(
+        x=forecast_years + forecast_years[::-1],
+        y=hi.tolist() + lo[::-1].tolist(),
+        fill="toself", fillcolor=color,
+        line=dict(color="rgba(0,0,0,0)"),
+        name=label
+    ))
+
+# Median line
+fig.add_trace(go.Scatter(
+    x=forecast_years, y=p50.tolist(),
+    mode="lines", name="Median",
+    line=dict(color=WONG[5], width=2.5)
+))
+
+fig.update_layout(
+    title="Fan Chart: Salary Cost Forecast with Uncertainty Bands",
+    xaxis_title="Year", yaxis_title="Total Salary Cost ($M)",
+    height=500
+)
+fig.show()
+```
+
+## Division-Level Forecasts
+
+Forecasting at the division level allows budget managers to plan unit-specific allocations.
+
+```{python}
+np.random.seed(456)
+
+fig = make_subplots(
+    rows=2, cols=3,
+    subplot_titles=list(divisions.keys()) + ["University Total"],
+    shared_yaxes=False, vertical_spacing=0.12, horizontal_spacing=0.08
+)
+
+for idx, div in enumerate(divisions.keys()):
+    row = idx // 3 + 1
+    col = idx % 3 + 1
+
+    div_data = df[df["division"] == div]
+    hist_costs = div_data.groupby("year")["total_salary_millions"].sum().values
+
+    # Division-specific Monte Carlo
+    div_growth = pd.Series(hist_costs).pct_change().dropna()
+    div_mean = div_growth.mean()
+    div_std = div_growth.std()
+
+    div_sims = np.zeros((2000, 5))
+    last_cost = hist_costs[-1]
+    for s in range(2000):
+        cost = last_cost
+        for yr in range(5):
+            cost = cost * (1 + np.random.normal(div_mean, div_std))
+            div_sims[s, yr] = cost
+
+    # Historical
+    fig.add_trace(go.Scatter(
+        x=years.tolist(), y=hist_costs.tolist(),
+        mode="lines+markers", name=div, showlegend=False,
+        line=dict(color=WONG[idx], width=2),
+        marker=dict(size=4)
+    ), row=row, col=col)
+
+    # Forecast band
+    lo = np.percentile(div_sims, 10, axis=0)
+    hi = np.percentile(div_sims, 90, axis=0)
+    med = np.percentile(div_sims, 50, axis=0)
+
+    fig.add_trace(go.Scatter(
+        x=forecast_years + forecast_years[::-1],
+        y=hi.tolist() + lo[::-1].tolist(),
+        fill="toself", fillcolor=f"rgba(0,114,178,0.15)",
+        line=dict(color="rgba(0,0,0,0)"),
+        showlegend=False
+    ), row=row, col=col)
+
+    fig.add_trace(go.Scatter(
+        x=forecast_years, y=med.tolist(),
+        mode="lines", showlegend=False,
+        line=dict(color=WONG[idx], width=2, dash="dash")
+    ), row=row, col=col)
+
+# University total in bottom-right
+fig.add_trace(go.Scatter(
+    x=totals["year"].tolist(), y=totals["total"].tolist(),
+    mode="lines+markers", name="Total", showlegend=False,
+    line=dict(color="black", width=2), marker=dict(size=4)
+), row=2, col=3)
+
+fig.add_trace(go.Scatter(
+    x=forecast_years + forecast_years[::-1],
+    y=p95.tolist() + p05[::-1].tolist(),
+    fill="toself", fillcolor="rgba(0,0,0,0.1)",
+    line=dict(color="rgba(0,0,0,0)"), showlegend=False
+), row=2, col=3)
+
+fig.add_trace(go.Scatter(
+    x=forecast_years, y=p50.tolist(),
+    mode="lines", showlegend=False,
+    line=dict(color="black", width=2, dash="dash")
+), row=2, col=3)
+
+fig.update_layout(title="Division-Level Salary Forecasts with 80% Bands", height=550)
+fig.show()
+```
+
+## Limitations of Extrapolation
+
+::: {.concept-box}
+#### The Extrapolation Trap
+
+All projection methods assume the future resembles the past. This assumption breaks when:
+
+- **Structural changes** occur: new state funding formulas, hiring freezes, reorganizations
+- **Policy shifts**: a new chancellor reverses salary priorities
+- **External shocks**: pandemics, recessions, legislative actions
+- **Nonlinear dynamics**: salary compression accelerating, retirement waves
+
+Best practices:
+
+1. **Never project beyond 2x your data window** --- 10 years of data supports at most 5 years of projection
+2. **Always show uncertainty** --- point forecasts without intervals are misleading
+3. **Validate on holdout data** --- fit on 2015-2022, test on 2023-2025
+4. **Combine with qualitative judgment** --- models inform, they do not decide
+5. **Update frequently** --- a forecast made in July is stale by December
+:::
+
+### Cross-Validation Example
+
+```{python}
+# Fit on 2015-2022, test on 2023-2025
+train = totals[totals["year"] <= 2022]
+test = totals[totals["year"] > 2022]
+
+# Fit linear model on training data
+coeffs_train = np.polyfit(train["year"], train["total"], 1)
+test_pred = np.polyval(coeffs_train, test["year"])
+
+# Calculate forecast errors
+errors = test["total"].values - test_pred
+mape = np.mean(np.abs(errors) / test["total"].values) * 100
+
+print("Cross-Validation: Train on 2015-2022, Test on 2023-2025")
+print("-" * 50)
+for i, year in enumerate(test["year"]):
+    print(f"  {year}: Actual=${test['total'].values[i]:,.1f}M  "
+          f"Predicted=${test_pred[i]:,.1f}M  "
+          f"Error={errors[i]:+,.1f}M")
+print(f"\nMean Absolute % Error (MAPE): {mape:.1f}%")
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 22: Budget Forecast for the College of Engineering
+
+Using the generated data:
+
+1. Extract the Engineering division's historical salary costs (2015-2025)
+2. Fit both a linear and exponential trend model
+3. Run 3,000 Monte Carlo simulations projecting 2026-2030
+4. Calculate the probability that Engineering's costs exceed $200M by 2030
+5. Create a fan chart with 50% and 90% bands
+6. Build a scenario comparison: 2% growth vs 4% growth vs historical average
+7. Print a summary table showing each scenario's 2030 projected cost
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Extract Engineering data
+eng = df[df["division"] == "Engineering"].copy()
+eng_yearly = eng.groupby("year")["total_salary_millions"].sum().reset_index()
+eng_yearly.columns = ["year", "cost"]
+
+print("Engineering Historical Costs:")
+print(eng_yearly.to_string(index=False))
+
+# 2. Linear and exponential trend models
+coeffs_lin = np.polyfit(eng_yearly["year"], eng_yearly["cost"], 1)
+coeffs_exp = np.polyfit(eng_yearly["year"], np.log(eng_yearly["cost"]), 1)
+
+future = np.arange(2026, 2031)
+proj_lin = np.polyval(coeffs_lin, future)
+proj_exp = np.exp(np.polyval(coeffs_exp, future))
+
+print(f"\nLinear slope: {coeffs_lin[0]:.2f}M/year")
+print(f"Exponential growth rate: {coeffs_exp[0]*100:.2f}%/year")
+
+# 3. Monte Carlo simulation
+np.random.seed(789)
+eng_growth = eng_yearly["cost"].pct_change().dropna()
+eng_mean_g = eng_growth.mean()
+eng_std_g = eng_growth.std()
+eng_current = eng_yearly["cost"].iloc[-1]
+
+n_sims = 3000
+eng_sims = np.zeros((n_sims, 5))
+for s in range(n_sims):
+    cost = eng_current
+    for yr in range(5):
+        cost = cost * (1 + np.random.normal(eng_mean_g, eng_std_g))
+        eng_sims[s, yr] = cost
+
+print(f"\nMonte Carlo median 2030: ${np.median(eng_sims[:, -1]):,.1f}M")
+
+# 4. Probability of exceeding $200M by 2030
+prob_200 = (eng_sims[:, -1] > 200).mean() * 100
+print(f"P(Engineering > $200M by 2030): {prob_200:.1f}%")
+
+# 5. Fan chart
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=eng_yearly["year"].tolist(), y=eng_yearly["cost"].tolist(),
+    mode="lines+markers", name="Historical",
+    line=dict(color="black", width=2), marker=dict(size=6, color="black")
+))
+
+for lo_pct, hi_pct, color, label in [
+    (5, 95, "rgba(0,158,115,0.15)", "90% interval"),
+    (25, 75, "rgba(0,158,115,0.35)", "50% interval"),
+]:
+    lo = np.percentile(eng_sims, lo_pct, axis=0)
+    hi = np.percentile(eng_sims, hi_pct, axis=0)
+    fig.add_trace(go.Scatter(
+        x=future.tolist() + future[::-1].tolist(),
+        y=hi.tolist() + lo[::-1].tolist(),
+        fill="toself", fillcolor=color,
+        line=dict(color="rgba(0,0,0,0)"), name=label
+    ))
+
+eng_median = np.median(eng_sims, axis=0)
+fig.add_trace(go.Scatter(
+    x=future.tolist(), y=eng_median.tolist(),
+    mode="lines", name="Median Forecast",
+    line=dict(color=WONG[2], width=2.5, dash="dash")
+))
+
+fig.add_hline(y=200, line_dash="dot", line_color=WONG[5],
+              annotation_text="$200M Threshold")
+
+fig.update_layout(
+    title="Engineering Division: Salary Cost Fan Chart",
+    xaxis_title="Year", yaxis_title="Salary Cost ($M)",
+    height=475
+)
+fig.show()
+
+# 6. Scenario comparison
+eng_scenarios = {
+    "Low growth (2%)": 0.020,
+    "Historical avg": eng_mean_g,
+    "High growth (4%)": 0.040,
+}
+
+fig2 = go.Figure()
+
+fig2.add_trace(go.Scatter(
+    x=eng_yearly["year"].tolist(), y=eng_yearly["cost"].tolist(),
+    mode="lines+markers", name="Historical",
+    line=dict(color="black", width=2), marker=dict(size=6, color="black")
+))
+
+for i, (name, rate) in enumerate(eng_scenarios.items()):
+    proj = [eng_current]
+    for yr in range(5):
+        proj.append(proj[-1] * (1 + rate))
+    fig2.add_trace(go.Scatter(
+        x=[2025] + future.tolist(), y=proj,
+        mode="lines+markers", name=f"{name} ({rate*100:.1f}%)",
+        line=dict(color=WONG[i], width=2, dash="dash"),
+        marker=dict(size=5)
+    ))
+
+fig2.update_layout(
+    title="Engineering Salary Cost: Scenario Comparison",
+    xaxis_title="Year", yaxis_title="Salary Cost ($M)",
+    height=450
+)
+fig2.show()
+
+# 7. Summary table
+print("\nScenario Summary - Engineering 2030 Projected Cost:")
+print("=" * 50)
+for name, rate in eng_scenarios.items():
+    cost_2030 = eng_current * (1 + rate) ** 5
+    increase = cost_2030 - eng_current
+    print(f"  {name:25s}: ${cost_2030:,.1f}M  (+${increase:,.1f}M)")
+```
+:::
+:::
+
+## Summary
+
+You have learned to build and communicate salary cost forecasts:
+
+- **Linear and exponential trends**: Quick projections using `np.polyfit` and `statsmodels`
+- **Confidence intervals**: Quantifying uncertainty in the trend line and individual predictions
+- **Monte Carlo simulation**: Generating thousands of scenarios to map the full distribution of outcomes
+- **Scenario modeling**: Testing specific "what if" assumptions for policy decisions
+- **Fan charts**: The gold standard for visualizing forecast uncertainty
+- **Cross-validation**: Testing how well your model would have performed on recent data
+
+Key takeaways:
+
+- A single-number forecast is almost always wrong --- always present ranges
+- Monte Carlo simulation is straightforward in Python and provides rich probability statements
+- Scenario modeling translates policy questions into quantitative projections
+- Extrapolation beyond your data window is dangerous --- validate and update frequently
+- Fan charts communicate uncertainty honestly to decision-makers
+
+## Next Steps
+
+Continue to [Lesson 23: Cost Modeling](23-cost-modeling.qmd) to learn how to build detailed cost models that decompose salary expenditures by component --- base pay, fringe benefits, merit increases, and market adjustments.

@@ -1,0 +1,535 @@
+---
+title: "Python Syntax for R Users"
+subtitle: "Lesson 2"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Understand zero-based indexing (vs R's one-based)
+- Work with Python data structures: lists, dictionaries, tuples
+- Use f-strings for string formatting (vs paste/glue)
+- Write list comprehensions (vs purrr::map)
+- Understand indentation-based code blocks (vs braces)
+:::
+
+## Introduction
+
+If you know R, you can learn Python quickly. The concepts are similar—variables, functions, loops, data structures—but the syntax differs in important ways. This lesson focuses on the differences that trip up R users most often.
+
+## Zero-Based Indexing
+
+The most common source of bugs when switching from R to Python:
+
+::: {.callout-warning}
+#### Critical Difference
+
+**R indexes from 1. Python indexes from 0.**
+
+```r
+# R
+x <- c("a", "b", "c")
+x[1]  # Returns "a"
+```
+
+```python
+# Python
+x = ["a", "b", "c"]
+x[0]  # Returns "a"
+x[1]  # Returns "b" (not "a"!)
+```
+:::
+
+Let's see this in action:
+
+```{python}
+# Python list (like R's vector)
+fruits = ["apple", "banana", "cherry"]
+
+print(f"First element:  fruits[0] = {fruits[0]}")
+print(f"Second element: fruits[1] = {fruits[1]}")
+print(f"Third element:  fruits[2] = {fruits[2]}")
+```
+
+### Slicing
+
+Python's slice notation `[start:end]` is also zero-based, and the end index is **exclusive**:
+
+```{python}
+numbers = [10, 20, 30, 40, 50]
+
+print(f"numbers[0:3] = {numbers[0:3]}")  # Elements 0, 1, 2 (not 3!)
+print(f"numbers[1:4] = {numbers[1:4]}")  # Elements 1, 2, 3
+print(f"numbers[:3]  = {numbers[:3]}")   # Start from beginning
+print(f"numbers[2:]  = {numbers[2:]}")   # Go to end
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+R uses one-based indexing and inclusive ranges:
+
+```r
+numbers <- c(10, 20, 30, 40, 50)
+numbers[1:3]  # Returns 10, 20, 30 (elements 1, 2, 3)
+numbers[2:4]  # Returns 20, 30, 40
+```
+
+To remember: In Python, `[0:3]` means "start at 0, stop before 3" → 3 elements.
+:::
+
+### Negative Indexing
+
+Both R and Python support negative indexing, but they mean different things:
+
+```{python}
+items = ["a", "b", "c", "d", "e"]
+
+# Python: negative index counts from the end
+print(f"items[-1] = {items[-1]}")  # Last element
+print(f"items[-2] = {items[-2]}")  # Second to last
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In R, negative indices **exclude** elements:
+
+```r
+items <- c("a", "b", "c", "d", "e")
+items[-1]  # Returns "b", "c", "d", "e" (excludes first)
+items[-c(1, 2)]  # Excludes first two
+```
+
+Python has no direct equivalent—you'd use slicing: `items[2:]`
+:::
+
+## Data Structures
+
+### Lists
+
+Python lists are similar to R's lists (not vectors):
+
+```{python}
+# Python list - can hold mixed types
+mixed_list = [1, "hello", 3.14, True]
+print(mixed_list)
+
+# Access by index
+print(f"Second element: {mixed_list[1]}")
+
+# Lists are mutable (can be changed)
+mixed_list[0] = 100
+print(f"After modification: {mixed_list}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+R vectors must be homogeneous (same type), while R lists can be heterogeneous:
+
+```r
+# R vector (coerces to character)
+mixed_vec <- c(1, "hello", 3.14)  # All become characters!
+
+# R list (preserves types)
+mixed_list <- list(1, "hello", 3.14)
+mixed_list[[2]]  # Access with double brackets
+```
+
+Python lists behave more like R lists.
+:::
+
+### Dictionaries
+
+Python dictionaries are key-value stores, similar to R's named lists:
+
+```{python}
+# Dictionary (like R's named list)
+employee = {
+    "name": "Alice",
+    "department": "Engineering",
+    "salary": 85000
+}
+
+# Access by key
+print(f"Name: {employee['name']}")
+print(f"Salary: ${employee['salary']:,}")
+
+# Add new key
+employee["hire_year"] = 2020
+print(employee)
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# R named list
+employee <- list(
+  name = "Alice",
+  department = "Engineering",
+  salary = 85000
+)
+
+# Access by name
+employee$name
+employee[["salary"]]
+```
+:::
+
+### Tuples
+
+Tuples are immutable (cannot be changed) sequences. R doesn't have a direct equivalent:
+
+```{python}
+# Tuple - immutable
+coordinates = (42.3601, -71.0589)  # Latitude, longitude
+
+print(f"Latitude: {coordinates[0]}")
+# coordinates[0] = 50  # This would raise an error!
+
+# Tuples are often used for function returns
+def get_stats(numbers):
+    return min(numbers), max(numbers), sum(numbers) / len(numbers)
+
+minimum, maximum, average = get_stats([10, 20, 30, 40])
+print(f"Min: {minimum}, Max: {maximum}, Avg: {average}")
+```
+
+## String Formatting with f-strings
+
+Python's f-strings are similar to R's `glue` package:
+
+```{python}
+name = "Alice"
+salary = 85000
+years = 5
+
+# f-string (formatted string literal)
+message = f"{name} earns ${salary:,} per year after {years} years."
+print(message)
+
+# Format specifiers
+pi = 3.14159265359
+print(f"Pi to 2 decimals: {pi:.2f}")
+print(f"Pi to 4 decimals: {pi:.4f}")
+
+# Expressions inside f-strings
+print(f"Monthly salary: ${salary / 12:,.2f}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+library(glue)
+
+name <- "Alice"
+salary <- 85000
+years <- 5
+
+# glue (similar to f-strings)
+glue("{name} earns ${format(salary, big.mark=',')} per year after {years} years.")
+
+# paste (older approach)
+paste0(name, " earns $", format(salary, big.mark = ","), " per year.")
+
+# sprintf (C-style formatting)
+sprintf("%s earns $%s after %d years.", name, format(salary, big.mark = ","), years)
+```
+:::
+
+### Common Format Specifiers
+
+| Specifier | Meaning | Example |
+|-----------|---------|---------|
+| `:.2f` | 2 decimal places | `3.14` |
+| `:,` | Thousands separator | `85,000` |
+| `:,.2f` | Both | `85,000.00` |
+| `:.0%` | Percentage | `75%` |
+| `:>10` | Right-align, width 10 | `"     hello"` |
+
+## List Comprehensions
+
+List comprehensions are Python's concise way to create lists from iterables. They're similar to R's `purrr::map()` or `sapply()`:
+
+```{python}
+# Traditional loop
+squares_loop = []
+for x in range(1, 6):
+    squares_loop.append(x ** 2)
+print(f"Loop: {squares_loop}")
+
+# List comprehension (Pythonic!)
+squares_comp = [x ** 2 for x in range(1, 6)]
+print(f"Comprehension: {squares_comp}")
+```
+
+### With Conditions
+
+```{python}
+numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# Filter to even numbers, then square them
+even_squares = [x ** 2 for x in numbers if x % 2 == 0]
+print(f"Squares of even numbers: {even_squares}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# sapply approach
+squares <- sapply(1:5, function(x) x^2)
+
+# purrr approach
+library(purrr)
+squares <- map_dbl(1:5, ~ .x^2)
+
+# With filtering
+numbers <- 1:10
+even_squares <- map_dbl(numbers[numbers %% 2 == 0], ~ .x^2)
+```
+:::
+
+### Dictionary Comprehensions
+
+You can also create dictionaries this way:
+
+```{python}
+# Create dictionary mapping names to name lengths
+names = ["Alice", "Bob", "Carol", "David"]
+name_lengths = {name: len(name) for name in names}
+print(name_lengths)
+```
+
+## Indentation Matters
+
+In R, code blocks use braces `{}`. In Python, code blocks use **indentation**:
+
+```{python}
+salary = 75000
+
+# Python uses indentation to define blocks
+if salary > 80000:
+    print("High earner")
+    tax_rate = 0.30
+elif salary > 50000:
+    print("Middle earner")
+    tax_rate = 0.25
+else:
+    print("Standard rate")
+    tax_rate = 0.20
+
+print(f"Tax rate: {tax_rate:.0%}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+salary <- 75000
+
+if (salary > 80000) {
+  print("High earner")
+  tax_rate <- 0.30
+} else if (salary > 50000) {
+  print("Middle earner")
+  tax_rate <- 0.25
+} else {
+  print("Standard rate")
+  tax_rate <- 0.20
+}
+```
+:::
+
+::: {.pycharm-tip}
+PyCharm automatically handles indentation. When you press Enter after a colon, it indents the next line. Press Backspace to dedent. If you get "IndentationError", check that your indentation is consistent (all spaces or all tabs, not mixed).
+:::
+
+### Functions
+
+```{python}
+def calculate_tax(salary, rate=0.25):
+    """
+    Calculate tax owed based on salary and rate.
+
+    Parameters:
+        salary: Annual salary
+        rate: Tax rate (default 0.25)
+
+    Returns:
+        Tax amount owed
+    """
+    tax = salary * rate
+    return tax
+
+# Using the function
+tax_owed = calculate_tax(75000)
+print(f"Tax owed at default rate: ${tax_owed:,}")
+
+tax_owed_high = calculate_tax(75000, rate=0.30)
+print(f"Tax owed at 30%: ${tax_owed_high:,}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+calculate_tax <- function(salary, rate = 0.25) {
+  #' Calculate tax owed based on salary and rate
+  tax <- salary * rate
+  return(tax)  # return() is optional in R
+}
+
+calculate_tax(75000)
+calculate_tax(75000, rate = 0.30)
+```
+:::
+
+## None vs NA
+
+Python uses `None` for missing/null values. R uses `NA`:
+
+```{python}
+# None is Python's null value
+result = None
+
+if result is None:
+    print("No result yet")
+
+# Check for None using 'is', not '=='
+# This is important!
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# NA is R's missing value
+result <- NA
+
+if (is.na(result)) {
+  print("No result yet")
+}
+
+# NA propagates through operations
+NA + 5  # Returns NA
+```
+:::
+
+In pandas DataFrames (next lesson), you'll work with `NaN` (Not a Number) for missing values, which behaves more like R's `NA`.
+
+## Quick Reference Table
+
+| Concept | R | Python |
+|---------|---|--------|
+| First element | `x[1]` | `x[0]` |
+| Last element | `x[length(x)]` or `tail(x, 1)` | `x[-1]` |
+| Slice | `x[2:4]` (inclusive) | `x[1:4]` (exclusive end) |
+| String format | `glue("{x}")` or `paste()` | `f"{x}"` |
+| Apply function | `sapply(x, f)` or `map(x, f)` | `[f(i) for i in x]` |
+| Define function | `f <- function(x) { }` | `def f(x):` |
+| If/else | `if () { } else { }` | `if : ... else:` |
+| Null value | `NA` | `None` (or `NaN` in pandas) |
+| Boolean AND | `&` or `&&` | `and` (or `&` for arrays) |
+| Boolean OR | `|` or `||` | `or` (or `|` for arrays) |
+| Not | `!` | `not` (or `~` for arrays) |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 2: Translate R to Python
+
+Translate each of these R code snippets to Python:
+
+**1. Create a vector and get the last element:**
+```r
+salaries <- c(50000, 60000, 75000, 90000)
+last_salary <- salaries[length(salaries)]
+```
+
+**2. Filter and transform:**
+```r
+numbers <- 1:10
+big_squares <- sapply(numbers[numbers > 5], function(x) x^2)
+```
+
+**3. String formatting:**
+```r
+name <- "Engineering"
+count <- 42
+glue("The {name} department has {count} employees.")
+```
+
+**4. Named list creation:**
+```r
+dept <- list(
+  name = "Finance",
+  headcount = 15,
+  budget = 2500000
+)
+dept$name
+```
+
+**5. Conditional assignment:**
+```r
+salary <- 65000
+level <- if (salary > 80000) "Senior" else if (salary > 50000) "Mid" else "Junior"
+```
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Create a list and get the last element
+salaries = [50000, 60000, 75000, 90000]
+last_salary = salaries[-1]
+print(f"1. Last salary: ${last_salary:,}")
+
+# 2. Filter and transform with list comprehension
+numbers = list(range(1, 11))  # 1 to 10
+big_squares = [x ** 2 for x in numbers if x > 5]
+print(f"2. Squares of numbers > 5: {big_squares}")
+
+# 3. String formatting with f-string
+name = "Engineering"
+count = 42
+message = f"The {name} department has {count} employees."
+print(f"3. {message}")
+
+# 4. Dictionary creation
+dept = {
+    "name": "Finance",
+    "headcount": 15,
+    "budget": 2500000
+}
+print(f"4. Department name: {dept['name']}")
+
+# 5. Conditional expression (ternary)
+salary = 65000
+level = "Senior" if salary > 80000 else ("Mid" if salary > 50000 else "Junior")
+print(f"5. Level for ${salary:,}: {level}")
+```
+:::
+:::
+
+## Summary
+
+Key Python syntax differences from R:
+
+1. **Zero-based indexing**: First element is `[0]`, not `[1]`
+2. **Slices are exclusive**: `[0:3]` gives elements 0, 1, 2 (not 3)
+3. **f-strings**: `f"Value: {x}"` instead of `glue()` or `paste()`
+4. **List comprehensions**: `[x**2 for x in items]` instead of `sapply()`
+5. **Indentation**: Defines code blocks instead of `{}`
+6. **None vs NA**: Python's null is `None`
+
+With these fundamentals, you're ready to work with pandas DataFrames.
+
+## Next Steps
+
+Continue to [Lesson 3: Introduction to pandas DataFrames](03-pandas-intro.qmd) to learn the Python equivalent of R's data frames and tibbles.

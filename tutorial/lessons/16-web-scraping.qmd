@@ -1,0 +1,727 @@
+---
+title: "Web Scraping Basics"
+subtitle: "Lesson 16"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Understand when web scraping is appropriate (vs. APIs)
+- Use BeautifulSoup to parse HTML documents
+- Navigate the DOM to extract specific elements
+- Handle nested structures and tables
+- Practice ethical scraping (robots.txt, rate limiting)
+:::
+
+## Introduction
+
+Web scraping extracts data from web pages by parsing their HTML. While APIs are preferred, scraping is sometimes necessary when:
+
+- No API exists
+- The API is too limited
+- You need historical snapshots of web content
+
+::: {.callout-warning}
+#### Ethical Scraping
+
+Before scraping any website:
+
+1. **Check for an API first** (it's almost always better)
+2. **Review the site's `robots.txt` file** (e.g., example.com/robots.txt)
+3. **Respect rate limits** to avoid overwhelming servers
+4. **Check terms of service** for scraping policies
+5. **Cache responses** to minimize requests
+6. **Identify yourself** with a User-Agent header
+:::
+
+```{python}
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import time
+from pathlib import Path
+```
+
+## BeautifulSoup Basics
+
+BeautifulSoup parses HTML and provides methods to navigate and search the document.
+
+```{python}
+# pip install beautifulsoup4
+
+# Sample HTML (like a simple job listing page)
+sample_html = """
+<!DOCTYPE html>
+<html>
+<head><title>Job Listings</title></head>
+<body>
+    <h1>UW-Madison Job Classifications</h1>
+    <div class="job-list">
+        <div class="job" id="job-1">
+            <h2 class="title">Assistant Professor</h2>
+            <span class="code">FA001</span>
+            <span class="salary-range">$85,000 - $120,000</span>
+            <p class="description">Teaching and research position.</p>
+        </div>
+        <div class="job" id="job-2">
+            <h2 class="title">Associate Professor</h2>
+            <span class="code">FA002</span>
+            <span class="salary-range">$95,000 - $150,000</span>
+            <p class="description">Senior faculty position.</p>
+        </div>
+        <div class="job" id="job-3">
+            <h2 class="title">Academic Staff</h2>
+            <span class="code">AS001</span>
+            <span class="salary-range">$55,000 - $85,000</span>
+            <p class="description">Research and support role.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+# Parse the HTML
+soup = BeautifulSoup(sample_html, "html.parser")
+print(f"Page title: {soup.title.string}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# rvest approach
+library(rvest)
+page <- read_html("https://example.com")
+titles <- page %>%
+  html_elements("h2") %>%
+  html_text()
+```
+:::
+
+### Finding Elements
+
+```{python}
+# Find by tag name
+h1 = soup.find("h1")
+print(f"H1 text: {h1.text}")
+
+# Find by class
+jobs = soup.find_all("div", class_="job")
+print(f"Number of jobs: {len(jobs)}")
+
+# Find by ID
+job1 = soup.find(id="job-1")
+print(f"Job 1 title: {job1.find('h2').text}")
+```
+
+### CSS Selectors
+
+CSS selectors provide a powerful way to find elements:
+
+```{python}
+# Select by class
+titles = soup.select(".title")
+print("Job titles:")
+for title in titles:
+    print(f"  - {title.text}")
+
+# Select nested elements
+codes = soup.select(".job .code")
+print("\nJob codes:")
+for code in codes:
+    print(f"  - {code.text}")
+
+# Complex selectors
+first_job_title = soup.select_one("#job-1 .title")
+print(f"\nFirst job: {first_job_title.text}")
+```
+
+### Common Selector Patterns
+
+| Selector | Meaning | Example |
+|----------|---------|---------|
+| `tag` | Element by tag | `soup.select("div")` |
+| `.class` | Element by class | `soup.select(".job")` |
+| `#id` | Element by ID | `soup.select("#job-1")` |
+| `parent child` | Descendant | `soup.select(".job .title")` |
+| `parent > child` | Direct child | `soup.select(".job-list > .job")` |
+| `[attr]` | Has attribute | `soup.select("[href]")` |
+| `[attr=value]` | Attribute equals | `soup.select("[class='title']")` |
+
+## Navigating the DOM
+
+The DOM (Document Object Model) is a tree structure. Navigate it using parent, child, and sibling relationships.
+
+```{python}
+# Get a job element
+job = soup.find("div", class_="job")
+
+# Navigate to children
+for child in job.children:
+    if child.name:  # Skip text nodes
+        print(f"Child: {child.name} - {child.text.strip()[:30]}")
+```
+
+```{python}
+# Navigate to parent
+title = soup.find("h2", class_="title")
+parent = title.parent
+print(f"Title's parent: {parent.name}, id={parent.get('id')}")
+
+# Navigate to siblings
+code = soup.find("span", class_="code")
+next_elem = code.find_next_sibling()
+print(f"After code: {next_elem.text}")
+```
+
+## Extracting Structured Data
+
+Let's extract job data into a DataFrame:
+
+```{python}
+def extract_job_data(soup):
+    """Extract all job listings into a list of dictionaries."""
+    jobs = []
+
+    for job_div in soup.find_all("div", class_="job"):
+        job = {
+            "id": job_div.get("id"),
+            "title": job_div.find("h2", class_="title").text.strip(),
+            "code": job_div.find("span", class_="code").text.strip(),
+            "salary_range": job_div.find("span", class_="salary-range").text.strip(),
+            "description": job_div.find("p", class_="description").text.strip()
+        }
+        jobs.append(job)
+
+    return jobs
+
+jobs = extract_job_data(soup)
+df = pd.DataFrame(jobs)
+print(df)
+```
+
+### Parsing Salary Ranges
+
+```{python}
+import re
+
+def parse_salary_range(salary_str):
+    """Extract min and max salary from a range string."""
+    # Remove $ and commas, find all numbers
+    numbers = re.findall(r"[\d,]+", salary_str)
+    numbers = [int(n.replace(",", "")) for n in numbers]
+
+    if len(numbers) >= 2:
+        return numbers[0], numbers[1]
+    elif len(numbers) == 1:
+        return numbers[0], numbers[0]
+    return None, None
+
+# Apply to our data
+df["salary_min"], df["salary_max"] = zip(*df["salary_range"].apply(parse_salary_range))
+print(df[["title", "salary_min", "salary_max"]])
+```
+
+## Scraping Tables
+
+HTML tables are common and easy to parse:
+
+```{python}
+table_html = """
+<table class="salary-table">
+    <thead>
+        <tr>
+            <th>Division</th>
+            <th>Headcount</th>
+            <th>Median Salary</th>
+            <th>Total Budget</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Letters & Science</td>
+            <td>2,450</td>
+            <td>$78,500</td>
+            <td>$245,000,000</td>
+        </tr>
+        <tr>
+            <td>Medicine</td>
+            <td>3,200</td>
+            <td>$95,000</td>
+            <td>$420,000,000</td>
+        </tr>
+        <tr>
+            <td>Engineering</td>
+            <td>1,100</td>
+            <td>$88,000</td>
+            <td>$125,000,000</td>
+        </tr>
+    </tbody>
+</table>
+"""
+
+soup = BeautifulSoup(table_html, "html.parser")
+```
+
+### Method 1: Manual Extraction
+
+```{python}
+def extract_table(soup, table_selector):
+    """Extract an HTML table into a list of dictionaries."""
+    table = soup.select_one(table_selector)
+
+    # Get headers
+    headers = [th.text.strip() for th in table.select("thead th")]
+
+    # Get rows
+    rows = []
+    for tr in table.select("tbody tr"):
+        cells = [td.text.strip() for td in tr.select("td")]
+        rows.append(dict(zip(headers, cells)))
+
+    return rows
+
+data = extract_table(soup, ".salary-table")
+df = pd.DataFrame(data)
+print(df)
+```
+
+### Method 2: pandas read_html
+
+```{python}
+# pandas can read HTML tables directly!
+tables = pd.read_html(table_html)
+df = tables[0]  # First table found
+print(df)
+```
+
+```{python}
+# Clean numeric columns
+def clean_currency(val):
+    """Convert currency string to number."""
+    if pd.isna(val):
+        return val
+    return int(str(val).replace("$", "").replace(",", ""))
+
+df["Median Salary"] = df["Median Salary"].apply(clean_currency)
+df["Total Budget"] = df["Total Budget"].apply(clean_currency)
+df["Headcount"] = df["Headcount"].str.replace(",", "").astype(int)
+
+print(df)
+print(df.dtypes)
+```
+
+## Fetching Web Pages
+
+Now let's fetch real web pages:
+
+```{python}
+#| eval: false
+def fetch_page(url, headers=None, delay=1):
+    """Fetch a web page with polite delay."""
+    default_headers = {
+        "User-Agent": "UW-Salary-Analysis/1.0 (Educational project; contact@example.com)"
+    }
+    headers = headers or default_headers
+
+    time.sleep(delay)  # Be polite
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+
+    return BeautifulSoup(response.text, "html.parser")
+
+# Example usage
+# soup = fetch_page("https://example.com/jobs")
+```
+
+### Checking robots.txt
+
+```{python}
+#| eval: false
+from urllib.parse import urlparse
+
+def check_robots_txt(url):
+    """Check if scraping is allowed by robots.txt."""
+    parsed = urlparse(url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+
+    try:
+        response = requests.get(robots_url, timeout=10)
+        print(f"robots.txt for {parsed.netloc}:")
+        print(response.text[:500])  # First 500 chars
+    except requests.RequestException as e:
+        print(f"Could not fetch robots.txt: {e}")
+
+# check_robots_txt("https://www.wisconsin.edu")
+```
+
+## Handling Complex HTML
+
+Real-world HTML is often messy. Here are strategies for common issues:
+
+### Missing Elements
+
+```{python}
+messy_html = """
+<div class="job">
+    <h2 class="title">Position A</h2>
+    <span class="code">CODE1</span>
+    <!-- No salary range! -->
+</div>
+<div class="job">
+    <h2 class="title">Position B</h2>
+    <!-- No code! -->
+    <span class="salary-range">$50,000 - $60,000</span>
+</div>
+"""
+
+soup = BeautifulSoup(messy_html, "html.parser")
+
+def safe_extract(element, selector, default=""):
+    """Safely extract text from an element."""
+    found = element.select_one(selector)
+    return found.text.strip() if found else default
+
+jobs = []
+for job_div in soup.find_all("div", class_="job"):
+    jobs.append({
+        "title": safe_extract(job_div, ".title"),
+        "code": safe_extract(job_div, ".code", "UNKNOWN"),
+        "salary": safe_extract(job_div, ".salary-range", "Not specified")
+    })
+
+print(pd.DataFrame(jobs))
+```
+
+### Nested Structures
+
+```{python}
+nested_html = """
+<div class="department">
+    <h2>College of Letters & Science</h2>
+    <div class="sub-department">
+        <h3>Chemistry</h3>
+        <ul class="employees">
+            <li>John Smith - $95,000</li>
+            <li>Jane Doe - $102,000</li>
+        </ul>
+    </div>
+    <div class="sub-department">
+        <h3>Physics</h3>
+        <ul class="employees">
+            <li>Bob Wilson - $98,000</li>
+        </ul>
+    </div>
+</div>
+"""
+
+soup = BeautifulSoup(nested_html, "html.parser")
+
+employees = []
+for dept in soup.find_all("div", class_="department"):
+    college = dept.find("h2").text.strip()
+
+    for sub in dept.find_all("div", class_="sub-department"):
+        sub_name = sub.find("h3").text.strip()
+
+        for emp in sub.find_all("li"):
+            name, salary = emp.text.rsplit(" - ", 1)
+            employees.append({
+                "college": college,
+                "department": sub_name,
+                "name": name.strip(),
+                "salary": salary.strip()
+            })
+
+print(pd.DataFrame(employees))
+```
+
+## Pagination
+
+Many sites split data across multiple pages:
+
+```{python}
+#| eval: false
+def scrape_paginated(base_url, max_pages=10, delay=1):
+    """Scrape multiple pages of results."""
+    all_data = []
+
+    for page in range(1, max_pages + 1):
+        url = f"{base_url}?page={page}"
+        print(f"Fetching page {page}...")
+
+        try:
+            soup = fetch_page(url, delay=delay)
+
+            # Extract data from this page
+            page_data = extract_job_data(soup)
+
+            if not page_data:
+                print("No more data, stopping.")
+                break
+
+            all_data.extend(page_data)
+
+        except requests.RequestException as e:
+            print(f"Error on page {page}: {e}")
+            break
+
+    return all_data
+
+# Example usage
+# all_jobs = scrape_paginated("https://example.com/jobs", max_pages=5)
+```
+
+## Caching Scraped Data
+
+Cache pages locally to avoid re-fetching:
+
+```{python}
+import hashlib
+
+def fetch_with_cache(url, cache_dir="data/scrape_cache"):
+    """Fetch page with local file caching."""
+    cache_path = Path(cache_dir)
+    cache_path.mkdir(parents=True, exist_ok=True)
+
+    # Create unique filename from URL
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    cache_file = cache_path / f"{url_hash}.html"
+
+    # Check cache
+    if cache_file.exists():
+        print(f"Using cached: {url[:50]}...")
+        return BeautifulSoup(cache_file.read_text(), "html.parser")
+
+    # Fetch and cache
+    print(f"Fetching: {url[:50]}...")
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+
+    cache_file.write_text(response.text)
+    return BeautifulSoup(response.text, "html.parser")
+```
+
+## Complete Scraping Pipeline
+
+```{python}
+class JobScraper:
+    """Scraper for job listing pages."""
+
+    def __init__(self, cache_dir="data/scrape_cache", delay=1):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.delay = delay
+
+    def _get_cache_path(self, url):
+        """Generate cache filename."""
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        return self.cache_dir / f"{url_hash}.html"
+
+    def fetch(self, url, use_cache=True):
+        """Fetch a page with optional caching."""
+        cache_path = self._get_cache_path(url)
+
+        if use_cache and cache_path.exists():
+            return BeautifulSoup(cache_path.read_text(), "html.parser")
+
+        time.sleep(self.delay)
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Educational-Scraper/1.0"},
+            timeout=30
+        )
+        response.raise_for_status()
+
+        if use_cache:
+            cache_path.write_text(response.text)
+
+        return BeautifulSoup(response.text, "html.parser")
+
+    def extract_jobs(self, soup):
+        """Extract job data from a page."""
+        jobs = []
+        for job_div in soup.find_all("div", class_="job"):
+            jobs.append({
+                "title": safe_extract(job_div, ".title"),
+                "code": safe_extract(job_div, ".code"),
+                "salary_range": safe_extract(job_div, ".salary-range")
+            })
+        return jobs
+
+    def scrape_all(self, base_url, max_pages=10):
+        """Scrape all pages."""
+        all_jobs = []
+
+        for page in range(1, max_pages + 1):
+            url = f"{base_url}?page={page}"
+
+            try:
+                soup = self.fetch(url)
+                jobs = self.extract_jobs(soup)
+
+                if not jobs:
+                    break
+
+                all_jobs.extend(jobs)
+                print(f"Page {page}: {len(jobs)} jobs")
+
+            except Exception as e:
+                print(f"Error on page {page}: {e}")
+                break
+
+        return pd.DataFrame(all_jobs)
+```
+
+::: {.pycharm-tip}
+When developing scrapers, use PyCharm's debugger to inspect the `soup` object. Set a breakpoint after parsing and use the Variables pane to explore the DOM structure interactively.
+:::
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 16: Scraping a Salary Table
+
+Given this sample HTML representing salary data:
+
+```{python}
+exercise_html = """
+<html>
+<body>
+    <h1>2024 Salary Report</h1>
+    <table id="salary-data">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Department</th>
+                <th>Title</th>
+                <th>Salary</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="row faculty">
+                <td>Alice Johnson</td>
+                <td>Chemistry</td>
+                <td>Professor</td>
+                <td>$125,000</td>
+            </tr>
+            <tr class="row faculty">
+                <td>Bob Smith</td>
+                <td>Physics</td>
+                <td>Associate Professor</td>
+                <td>$98,500</td>
+            </tr>
+            <tr class="row staff">
+                <td>Carol Williams</td>
+                <td>Chemistry</td>
+                <td>Research Scientist</td>
+                <td>$72,000</td>
+            </tr>
+            <tr class="row staff">
+                <td>David Brown</td>
+                <td>Biology</td>
+                <td>Lab Manager</td>
+                <td>$65,000</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
+"""
+```
+
+Your tasks:
+
+1. Parse the HTML and extract all salary data into a DataFrame
+2. Convert the Salary column to numeric
+3. Calculate the average salary by department
+4. Find all faculty members (hint: check the row class)
+5. Calculate the salary gap between faculty and staff
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+from bs4 import BeautifulSoup
+import pandas as pd
+import re
+
+# 1. Parse HTML and extract salary data
+soup = BeautifulSoup(exercise_html, "html.parser")
+
+def extract_salary_table(soup):
+    """Extract salary table into DataFrame."""
+    table = soup.find("table", id="salary-data")
+    rows = []
+
+    for tr in table.select("tbody tr"):
+        cells = tr.find_all("td")
+        row_class = tr.get("class", [])
+
+        rows.append({
+            "name": cells[0].text.strip(),
+            "department": cells[1].text.strip(),
+            "title": cells[2].text.strip(),
+            "salary_str": cells[3].text.strip(),
+            "employee_type": "faculty" if "faculty" in row_class else "staff"
+        })
+
+    return pd.DataFrame(rows)
+
+df = extract_salary_table(soup)
+print("1. Extracted data:")
+print(df)
+
+# 2. Convert Salary to numeric
+def parse_salary(s):
+    """Convert '$125,000' to 125000."""
+    return int(re.sub(r"[^\d]", "", s))
+
+df["salary"] = df["salary_str"].apply(parse_salary)
+print("\n2. With numeric salary:")
+print(df[["name", "salary"]])
+
+# 3. Average salary by department
+avg_by_dept = df.groupby("department")["salary"].mean()
+print("\n3. Average salary by department:")
+print(avg_by_dept)
+
+# 4. Find all faculty members
+faculty = df[df["employee_type"] == "faculty"]
+print("\n4. Faculty members:")
+print(faculty[["name", "title", "salary"]])
+
+# 5. Salary gap between faculty and staff
+avg_by_type = df.groupby("employee_type")["salary"].mean()
+gap = avg_by_type["faculty"] - avg_by_type["staff"]
+print("\n5. Salary gap analysis:")
+print(f"   Faculty average: ${avg_by_type['faculty']:,.0f}")
+print(f"   Staff average:   ${avg_by_type['staff']:,.0f}")
+print(f"   Gap:             ${gap:,.0f} ({gap/avg_by_type['staff']*100:.1f}% higher)")
+```
+:::
+:::
+
+## Summary
+
+You've learned web scraping fundamentals:
+
+- **BeautifulSoup**: Parse HTML with `find()`, `find_all()`, and `select()`
+- **CSS Selectors**: Powerful element selection with `.class`, `#id`, `parent child`
+- **DOM Navigation**: Move through parent, child, and sibling elements
+- **Table Extraction**: Parse HTML tables into DataFrames
+- **Error Handling**: Deal with missing elements gracefully
+- **Pagination**: Scrape multiple pages systematically
+- **Caching**: Store pages locally to avoid re-fetching
+- **Ethics**: Check robots.txt, use delays, identify yourself
+
+Key principles:
+- Always prefer APIs over scraping
+- Be respectful: delays, caching, proper User-Agent
+- Handle missing data gracefully
+- Test on cached data during development
+
+## Next Steps
+
+Continue to [Lesson 17: Building Reusable Data Pipelines](17-reusable-pipelines.qmd) to learn how to structure your code for production use.

@@ -1,0 +1,306 @@
+---
+title: "Static Visualization with Plotly"
+subtitle: "Lesson 13"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Create figure objects and traces in Plotly
+- Build line charts, bar charts, and distribution plots
+- Use subplots and faceting for multi-panel displays
+- Apply colorblind-friendly palettes
+- Customize axes, legends, and annotations
+:::
+
+::: {.concept-box}
+#### Visualizing for Leadership
+
+The audience for your visualizations determines their design. In higher education financial analysis, you'll typically present to three very different audiences:
+
+- **Executive leadership (Provost, Chancellor, Board of Regents)**: They want the headline finding, the trend, and the implication. Use clean, uncluttered charts with clear titles that state the takeaway ("Faculty Salaries Have Declined 8% in Real Terms Since 2015"). Limit to 2-3 key data series. Always include a benchmark or reference line (inflation, peer median, policy target).
+- **Department chairs and deans**: They want to see their unit's data in context. Comparative bar charts, rank-ordered lists, and peer group distributions work well. They'll ask "where do I stand?" — make that easy to answer at a glance.
+- **Technical analysts and HR partners**: They can handle density, detail, and interactivity. Distribution plots, scatter matrices, and drill-down dashboards serve this audience well.
+
+A common mistake is building analyst-grade visualizations for executive audiences. A chart with 15 overlapping time series and no narrative title will lose a Provost in seconds. **The best financial visualizations tell a story** — they show what happened, why it matters, and what should be done about it.
+:::
+
+## Introduction
+
+Plotly creates interactive visualizations that work well in Quarto documents. Unlike matplotlib, Plotly charts have built-in zoom, pan, and hover features.
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Sample salary trend data
+dates = pd.date_range("2021-01", periods=8, freq="6MS")
+trends = pd.DataFrame({
+    "date": list(dates) * 3,
+    "category": ["Faculty"] * 8 + ["Academic Staff"] * 8 + ["University Staff"] * 8,
+    "median_salary": (
+        [95000, 97000, 99000, 101000, 103000, 105000, 107000, 110000] +
+        [72000, 73500, 75000, 76500, 78000, 79500, 81000, 83000] +
+        [55000, 56000, 57000, 58000, 59000, 60000, 61000, 62500]
+    )
+})
+```
+
+## Plotly Express: Quick Charts
+
+Plotly Express provides high-level functions for common chart types:
+
+### Line Charts
+
+```{python}
+fig = px.line(
+    trends,
+    x="date",
+    y="median_salary",
+    color="category",
+    title="Median Salary Trends by Employee Category",
+    labels={"median_salary": "Median Salary ($)", "date": "Year", "category": "Category"}
+)
+
+fig.update_layout(
+    legend=dict(orientation="h", yanchor="bottom", y=-0.3),
+    hovermode="x unified"
+)
+
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+library(plotly)
+library(ggplot2)
+
+# ggplot2 approach
+p <- ggplot(trends, aes(x = date, y = median_salary, color = category)) +
+  geom_line() +
+  labs(title = "Median Salary Trends")
+
+ggplotly(p)
+```
+:::
+
+### Bar Charts
+
+```{python}
+# Latest salary by category
+latest = trends[trends["date"] == trends["date"].max()]
+
+fig = px.bar(
+    latest,
+    x="category",
+    y="median_salary",
+    color="category",
+    title="Current Median Salary by Category"
+)
+
+fig.update_layout(showlegend=False)
+fig.show()
+```
+
+### Distribution Plots
+
+```{python}
+# Generate salary distribution data
+np.random.seed(42)
+salary_dist = pd.DataFrame({
+    "salary": np.concatenate([
+        np.random.normal(100000, 15000, 100),
+        np.random.normal(75000, 12000, 150),
+        np.random.normal(58000, 8000, 120)
+    ]),
+    "category": ["Faculty"] * 100 + ["Academic Staff"] * 150 + ["University Staff"] * 120
+})
+
+fig = px.box(
+    salary_dist,
+    x="category",
+    y="salary",
+    color="category",
+    title="Salary Distribution by Category"
+)
+fig.show()
+```
+
+## Graph Objects: More Control
+
+For complex visualizations, use `graph_objects`:
+
+```{python}
+fig = go.Figure()
+
+# Add traces for each category
+for cat in trends["category"].unique():
+    cat_data = trends[trends["category"] == cat]
+    fig.add_trace(go.Scatter(
+        x=cat_data["date"],
+        y=cat_data["median_salary"],
+        mode="lines+markers",
+        name=cat,
+        hovertemplate="%{y:$,.0f}<extra></extra>"
+    ))
+
+fig.update_layout(
+    title="Salary Trends (Graph Objects)",
+    xaxis_title="Date",
+    yaxis_title="Median Salary",
+    yaxis_tickformat="$,.0f"
+)
+
+fig.show()
+```
+
+## Subplots
+
+Create multi-panel displays:
+
+```{python}
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=("Nominal Salary", "Salary Growth Rate")
+)
+
+# Panel 1: Nominal salary
+for cat in ["Faculty", "Academic Staff"]:
+    cat_data = trends[trends["category"] == cat]
+    fig.add_trace(
+        go.Scatter(x=cat_data["date"], y=cat_data["median_salary"], name=cat, mode="lines"),
+        row=1, col=1
+    )
+
+# Panel 2: Growth rate (simulated)
+growth_data = trends.copy()
+growth_data["growth"] = growth_data.groupby("category")["median_salary"].pct_change() * 100
+
+for cat in ["Faculty", "Academic Staff"]:
+    cat_data = growth_data[growth_data["category"] == cat].dropna()
+    fig.add_trace(
+        go.Scatter(x=cat_data["date"], y=cat_data["growth"], name=cat, mode="lines", showlegend=False),
+        row=1, col=2
+    )
+
+fig.update_layout(height=400, title_text="Salary Analysis")
+fig.show()
+```
+
+## Colorblind-Friendly Palettes
+
+```{python}
+# Wong colorblind-friendly palette
+wong_palette = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]
+
+fig = px.line(
+    trends,
+    x="date",
+    y="median_salary",
+    color="category",
+    color_discrete_sequence=wong_palette,
+    title="Using Colorblind-Friendly Palette"
+)
+fig.show()
+```
+
+## Customization
+
+```{python}
+fig = px.line(trends, x="date", y="median_salary", color="category")
+
+fig.update_layout(
+    title=dict(text="Customized Chart", x=0.5, font=dict(size=20)),
+    xaxis=dict(title="Year", showgrid=True, gridcolor="lightgray"),
+    yaxis=dict(title="Salary ($)", tickformat="$,.0f", showgrid=True),
+    legend=dict(title="Category", orientation="h", y=-0.2),
+    plot_bgcolor="white",
+    font=dict(family="Arial", size=12)
+)
+
+fig.show()
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 13: Salary Visualization Suite
+
+1. Create a line chart showing salary trends over time
+2. Create a bar chart comparing current salaries across divisions
+3. Create a box plot showing salary distributions
+4. Apply a colorblind-friendly palette
+5. Create a two-panel subplot comparing nominal vs real salary
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+# Sample data
+divisions = ["L&S", "Medicine", "Engineering"]
+df = pd.DataFrame({
+    "division": divisions * 2,
+    "year": [2022] * 3 + [2024] * 3,
+    "salary": [85000, 105000, 95000, 90000, 112000, 102000],
+    "real_salary": [85000, 105000, 95000, 82000, 102000, 93000]
+})
+
+# 1. Line chart
+fig1 = px.line(df, x="year", y="salary", color="division", title="1. Salary Trends")
+fig1.show()
+
+# 2. Bar chart (2024)
+current = df[df["year"] == 2024]
+fig2 = px.bar(current, x="division", y="salary", title="2. Current Salaries by Division")
+fig2.show()
+
+# 3. Box plot
+np.random.seed(42)
+box_data = pd.DataFrame({
+    "salary": np.concatenate([np.random.normal(m, 10000, 30) for m in [85000, 105000, 95000]]),
+    "division": ["L&S"] * 30 + ["Medicine"] * 30 + ["Engineering"] * 30
+})
+fig3 = px.box(box_data, x="division", y="salary", title="3. Salary Distributions")
+fig3.show()
+
+# 4. Colorblind palette (already applied)
+wong = ["#E69F00", "#56B4E9", "#009E73"]
+fig4 = px.bar(current, x="division", y="salary", color="division",
+              color_discrete_sequence=wong, title="4. Colorblind-Friendly")
+fig4.show()
+
+# 5. Subplot
+fig5 = make_subplots(rows=1, cols=2, subplot_titles=("Nominal", "Real (2021$)"))
+for i, div in enumerate(divisions):
+    d = df[df["division"] == div]
+    fig5.add_trace(go.Scatter(x=d["year"], y=d["salary"], name=div), row=1, col=1)
+    fig5.add_trace(go.Scatter(x=d["year"], y=d["real_salary"], name=div, showlegend=False), row=1, col=2)
+fig5.update_layout(title="5. Nominal vs Real Salary")
+fig5.show()
+```
+:::
+:::
+
+## Summary
+
+You've learned Plotly fundamentals:
+
+- **Plotly Express**: Quick charts with `px.line()`, `px.bar()`, `px.box()`
+- **Graph Objects**: Fine-grained control with `go.Figure()` and `go.Scatter()`
+- **Subplots**: Multi-panel displays with `make_subplots()`
+- **Customization**: Layouts, colors, axes, legends
+
+## Next Steps
+
+Continue to [Lesson 14: Interactive Dashboards in Quarto](14-interactive-dashboards.qmd).

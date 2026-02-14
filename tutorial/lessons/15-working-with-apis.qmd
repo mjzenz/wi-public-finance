@@ -1,0 +1,737 @@
+---
+title: "Working with APIs"
+subtitle: "Lesson 15"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Understand REST API concepts and HTTP methods
+- Use the `requests` library to fetch data from APIs
+- Parse JSON responses into pandas DataFrames
+- Handle API authentication and rate limiting
+- Implement caching to avoid repeated API calls
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### What is an API?
+
+An **API (Application Programming Interface)** allows programs to communicate with web services. For data analysis, we often use APIs to:
+
+- Fetch economic data (FRED, BLS, Census)
+- Access financial data (stock prices, exchange rates)
+- Retrieve metadata from institutional systems
+
+APIs are preferable to web scraping because they provide structured data in a predictable format.
+:::
+
+```{python}
+import pandas as pd
+import requests
+import json
+from datetime import datetime, timedelta
+import os
+```
+
+## REST API Basics
+
+REST (Representational State Transfer) APIs use standard HTTP methods:
+
+| Method | Purpose | Example |
+|--------|---------|---------|
+| GET | Retrieve data | Fetch CPI values |
+| POST | Send data | Submit a query |
+| PUT | Update data | Modify a record |
+| DELETE | Remove data | Delete a record |
+
+For data analysis, we primarily use **GET** requests.
+
+### Anatomy of an API Request
+
+```{python}
+# A typical API endpoint structure
+base_url = "https://api.stlouisfed.org/fred/series/observations"
+
+# Query parameters specify what data we want
+params = {
+    "series_id": "CPIAUCSL",      # CPI for All Urban Consumers
+    "api_key": "YOUR_API_KEY",     # Authentication
+    "file_type": "json",           # Response format
+    "observation_start": "2020-01-01",
+    "observation_end": "2024-01-01"
+}
+
+# The full URL would be:
+# https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=...
+```
+
+## The `requests` Library
+
+The `requests` library is Python's standard for HTTP communication.
+
+```{python}
+#| eval: false
+# Install if needed
+# pip install requests
+
+import requests
+
+# Basic GET request
+response = requests.get("https://httpbin.org/get")
+
+# Check if successful (status code 200)
+print(f"Status code: {response.status_code}")
+print(f"Success: {response.ok}")
+
+# Get response content
+data = response.json()  # Parse JSON response
+print(data)
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# httr2 approach
+library(httr2)
+response <- request("https://api.example.com/data") %>%
+  req_headers("Authorization" = paste("Bearer", api_key)) %>%
+  req_perform()
+
+data <- response %>% resp_body_json()
+```
+:::
+
+### Making Requests with Parameters
+
+```{python}
+#| eval: false
+# Pass parameters to the request
+params = {
+    "series_id": "CPIAUCSL",
+    "api_key": os.environ.get("FRED_API_KEY"),
+    "file_type": "json"
+}
+
+response = requests.get(
+    "https://api.stlouisfed.org/fred/series/observations",
+    params=params
+)
+
+# requests automatically encodes the URL
+print(f"Request URL: {response.url}")
+```
+
+### Handling Headers
+
+Some APIs require specific headers:
+
+```{python}
+#| eval: false
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {api_key}",
+    "User-Agent": "UW-Salary-Analysis/1.0"
+}
+
+response = requests.get(url, headers=headers)
+```
+
+## The FRED API
+
+The Federal Reserve Economic Data (FRED) API provides access to thousands of economic time series.
+
+### Getting an API Key
+
+1. Go to [https://fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)
+2. Create a free account
+3. Request an API key
+4. Store it securely (environment variable or config file)
+
+### Setting Up Your API Key
+
+::: {.pycharm-tip}
+In PyCharm, set environment variables via Run → Edit Configurations → Environment variables. Add `FRED_API_KEY=your_key_here`. This keeps your key out of your code.
+:::
+
+```{python}
+#| eval: false
+import os
+
+# Option 1: Environment variable (recommended)
+api_key = os.environ.get("FRED_API_KEY")
+
+# Option 2: Config file (add to .gitignore!)
+# with open("config/secrets.json") as f:
+#     config = json.load(f)
+#     api_key = config["fred_api_key"]
+```
+
+### Fetching CPI Data
+
+```{python}
+#| eval: false
+def fetch_fred_series(series_id, start_date, end_date, api_key):
+    """Fetch a time series from FRED API."""
+    url = "https://api.stlouisfed.org/fred/series/observations"
+
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "observation_start": start_date,
+        "observation_end": end_date
+    }
+
+    response = requests.get(url, params=params)
+
+    # Check for errors
+    if not response.ok:
+        raise Exception(f"API Error: {response.status_code} - {response.text}")
+
+    return response.json()
+
+# Fetch CPI data
+data = fetch_fred_series(
+    series_id="CPIAUCSL",
+    start_date="2020-01-01",
+    end_date="2024-12-01",
+    api_key=os.environ.get("FRED_API_KEY")
+)
+```
+
+### Using the `fredapi` Library
+
+For convenience, the `fredapi` library wraps the FRED API:
+
+```{python}
+#| eval: false
+# pip install fredapi
+from fredapi import Fred
+
+fred = Fred(api_key=os.environ.get("FRED_API_KEY"))
+
+# Fetch CPI series
+cpi = fred.get_series("CPIAUCSL", observation_start="2020-01-01")
+
+# Returns a pandas Series directly!
+print(type(cpi))
+print(cpi.head())
+```
+
+## Parsing JSON Responses
+
+Most APIs return JSON (JavaScript Object Notation). Here's how to parse it into pandas:
+
+```{python}
+# Simulated API response (what FRED returns)
+sample_response = {
+    "realtime_start": "2024-01-01",
+    "realtime_end": "2024-01-01",
+    "observation_start": "2020-01-01",
+    "observation_end": "2024-01-01",
+    "units": "lin",
+    "output_type": 1,
+    "file_type": "json",
+    "order_by": "observation_date",
+    "sort_order": "asc",
+    "count": 5,
+    "offset": 0,
+    "limit": 100000,
+    "observations": [
+        {"realtime_start": "2024-01-01", "realtime_end": "2024-01-01",
+         "date": "2020-01-01", "value": "257.971"},
+        {"realtime_start": "2024-01-01", "realtime_end": "2024-01-01",
+         "date": "2020-02-01", "value": "258.678"},
+        {"realtime_start": "2024-01-01", "realtime_end": "2024-01-01",
+         "date": "2020-03-01", "value": "258.115"},
+        {"realtime_start": "2024-01-01", "realtime_end": "2024-01-01",
+         "date": "2020-04-01", "value": "256.389"},
+        {"realtime_start": "2024-01-01", "realtime_end": "2024-01-01",
+         "date": "2020-05-01", "value": "256.394"}
+    ]
+}
+```
+
+### Extracting the Data
+
+```{python}
+# The data we need is nested in "observations"
+observations = sample_response["observations"]
+
+# Convert to DataFrame
+df = pd.DataFrame(observations)
+print("Raw DataFrame:")
+print(df)
+```
+
+### Cleaning the Data
+
+```{python}
+# Convert types
+df["date"] = pd.to_datetime(df["date"])
+df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+# Select only needed columns
+cpi_df = df[["date", "value"]].copy()
+cpi_df.columns = ["date", "cpi"]
+
+print("\nCleaned DataFrame:")
+print(cpi_df)
+```
+
+### Handling Missing Values
+
+```{python}
+# FRED uses "." for missing values
+sample_with_missing = {
+    "observations": [
+        {"date": "2020-01-01", "value": "257.971"},
+        {"date": "2020-02-01", "value": "."},  # Missing!
+        {"date": "2020-03-01", "value": "258.115"}
+    ]
+}
+
+df = pd.DataFrame(sample_with_missing["observations"])
+df["value"] = pd.to_numeric(df["value"], errors="coerce")  # "." becomes NaN
+
+print("After handling missing:")
+print(df)
+print(f"\nMissing values: {df['value'].isna().sum()}")
+```
+
+## Authentication and Rate Limiting
+
+### API Key Authentication
+
+```{python}
+#| eval: false
+# Method 1: Query parameter (FRED style)
+params = {"api_key": api_key, ...}
+response = requests.get(url, params=params)
+
+# Method 2: Header (Bearer token)
+headers = {"Authorization": f"Bearer {api_key}"}
+response = requests.get(url, headers=headers)
+
+# Method 3: Basic auth
+response = requests.get(url, auth=(username, password))
+```
+
+### Rate Limiting
+
+Most APIs limit how many requests you can make. Handle this gracefully:
+
+```{python}
+import time
+
+def fetch_with_retry(url, params, max_retries=3, delay=1):
+    """Fetch data with automatic retry on rate limit."""
+    for attempt in range(max_retries):
+        response = requests.get(url, params=params)
+
+        if response.ok:
+            return response.json()
+
+        # Rate limited (429) or server error (5xx)
+        if response.status_code == 429 or response.status_code >= 500:
+            wait_time = delay * (2 ** attempt)  # Exponential backoff
+            print(f"Rate limited. Waiting {wait_time}s before retry...")
+            time.sleep(wait_time)
+            continue
+
+        # Other error - don't retry
+        response.raise_for_status()
+
+    raise Exception(f"Failed after {max_retries} attempts")
+```
+
+### Respecting Rate Limits
+
+```{python}
+def fetch_multiple_series(series_ids, api_key, delay_between=0.5):
+    """Fetch multiple series with delay to respect rate limits."""
+    results = {}
+
+    for series_id in series_ids:
+        print(f"Fetching {series_id}...")
+        # ... fetch logic here ...
+        results[series_id] = None  # placeholder
+
+        # Be a good API citizen
+        time.sleep(delay_between)
+
+    return results
+
+# Example usage
+series_to_fetch = ["CPIAUCSL", "UNRATE", "GDP"]
+# data = fetch_multiple_series(series_to_fetch, api_key)
+```
+
+## Implementing Caching
+
+Caching saves API responses locally to avoid repeated calls.
+
+### Simple File-Based Cache
+
+```{python}
+import hashlib
+from pathlib import Path
+
+def get_cache_path(url, params, cache_dir="data/cache"):
+    """Generate a unique cache filename for a request."""
+    # Create a hash of the request
+    cache_key = hashlib.md5(f"{url}{sorted(params.items())}".encode()).hexdigest()
+    return Path(cache_dir) / f"{cache_key}.json"
+
+def fetch_with_cache(url, params, cache_dir="data/cache", max_age_days=7):
+    """Fetch data with file-based caching."""
+    cache_path = get_cache_path(url, params, cache_dir)
+
+    # Check if cache exists and is fresh
+    if cache_path.exists():
+        cache_age = datetime.now() - datetime.fromtimestamp(cache_path.stat().st_mtime)
+        if cache_age < timedelta(days=max_age_days):
+            print(f"Using cached data (age: {cache_age.days} days)")
+            with open(cache_path) as f:
+                return json.load(f)
+
+    # Fetch fresh data
+    print("Fetching fresh data from API...")
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    # Save to cache
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump(data, f)
+
+    return data
+```
+
+::: {.pycharm-tip}
+PyCharm's debugger is invaluable when working with APIs. Set breakpoints to inspect response objects and understand the data structure before writing parsing code.
+:::
+
+### Complete CPI Pipeline with Caching
+
+```{python}
+#| eval: false
+class FREDClient:
+    """Client for FRED API with built-in caching."""
+
+    def __init__(self, api_key, cache_dir="data/cache"):
+        self.api_key = api_key
+        self.cache_dir = Path(cache_dir)
+        self.base_url = "https://api.stlouisfed.org/fred"
+
+    def _get_cache_path(self, series_id, start_date, end_date):
+        """Generate cache filename."""
+        key = f"{series_id}_{start_date}_{end_date}"
+        return self.cache_dir / f"fred_{key}.csv"
+
+    def get_series(self, series_id, start_date, end_date, max_cache_days=30):
+        """Fetch a series, using cache if available."""
+        cache_path = self._get_cache_path(series_id, start_date, end_date)
+
+        # Check cache
+        if cache_path.exists():
+            cache_age = datetime.now() - datetime.fromtimestamp(cache_path.stat().st_mtime)
+            if cache_age.days < max_cache_days:
+                return pd.read_csv(cache_path, parse_dates=["date"])
+
+        # Fetch from API
+        url = f"{self.base_url}/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": self.api_key,
+            "file_type": "json",
+            "observation_start": start_date,
+            "observation_end": end_date
+        }
+
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+
+        # Parse response
+        data = response.json()
+        df = pd.DataFrame(data["observations"])
+        df["date"] = pd.to_datetime(df["date"])
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df[["date", "value"]].rename(columns={"value": series_id.lower()})
+
+        # Save cache
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        df.to_csv(cache_path, index=False)
+
+        return df
+
+# Usage
+client = FREDClient(api_key=os.environ.get("FRED_API_KEY"))
+cpi = client.get_series("CPIAUCSL", "2020-01-01", "2024-12-01")
+```
+
+## Working with Other APIs
+
+### Bureau of Labor Statistics (BLS)
+
+```{python}
+#| eval: false
+import requests
+
+def fetch_bls_data(series_ids, start_year, end_year, api_key=None):
+    """Fetch data from BLS API v2."""
+    url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+
+    payload = {
+        "seriesid": series_ids,
+        "startyear": str(start_year),
+        "endyear": str(end_year)
+    }
+
+    if api_key:
+        payload["registrationkey"] = api_key
+
+    response = requests.post(url, json=payload)
+    return response.json()
+
+# CPI series: CUSR0000SA0 (CPI-U, All items)
+# data = fetch_bls_data(["CUSR0000SA0"], 2020, 2024)
+```
+
+### Census Bureau
+
+```{python}
+#| eval: false
+def fetch_census_data(dataset, year, variables, geography, api_key):
+    """Fetch data from Census API."""
+    url = f"https://api.census.gov/data/{year}/{dataset}"
+
+    params = {
+        "get": ",".join(variables),
+        "for": geography,
+        "key": api_key
+    }
+
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    # First row is headers, rest is data
+    df = pd.DataFrame(data[1:], columns=data[0])
+    return df
+
+# Example: Population by state
+# df = fetch_census_data("acs/acs5", 2022, ["NAME", "B01001_001E"], "state:*", api_key)
+```
+
+## Error Handling Best Practices
+
+```{python}
+class APIError(Exception):
+    """Custom exception for API errors."""
+    def __init__(self, status_code, message):
+        self.status_code = status_code
+        self.message = message
+        super().__init__(f"API Error {status_code}: {message}")
+
+def fetch_data_safely(url, params):
+    """Fetch data with comprehensive error handling."""
+    try:
+        response = requests.get(url, params=params, timeout=30)
+
+        # Check for HTTP errors
+        if response.status_code == 401:
+            raise APIError(401, "Invalid API key")
+        elif response.status_code == 403:
+            raise APIError(403, "Access forbidden - check your permissions")
+        elif response.status_code == 404:
+            raise APIError(404, "Resource not found - check series ID")
+        elif response.status_code == 429:
+            raise APIError(429, "Rate limit exceeded - wait before retrying")
+        elif response.status_code >= 500:
+            raise APIError(response.status_code, "Server error - try again later")
+
+        response.raise_for_status()
+        return response.json()
+
+    except requests.exceptions.Timeout:
+        raise APIError(408, "Request timed out")
+    except requests.exceptions.ConnectionError:
+        raise APIError(0, "Could not connect to API")
+    except json.JSONDecodeError:
+        raise APIError(0, "Invalid JSON response")
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 15: Building a CPI Data Pipeline
+
+1. Register for a free FRED API key
+2. Create a function to fetch CPI data (series CPIAUCSL) for the past 5 years
+3. Parse the JSON response into a DataFrame with `date` and `cpi` columns
+4. Calculate the year-over-year inflation rate
+5. Implement caching so subsequent runs don't hit the API
+6. Handle potential errors (network issues, invalid API key)
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+#| eval: false
+import pandas as pd
+import requests
+import json
+from pathlib import Path
+from datetime import datetime, timedelta
+import os
+
+class CPIPipeline:
+    """Pipeline for fetching and processing CPI data."""
+
+    def __init__(self, api_key, cache_dir="data/cache"):
+        self.api_key = api_key
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_cache_path(self):
+        """Get path to cache file."""
+        return self.cache_dir / "cpi_data.csv"
+
+    def _is_cache_valid(self, max_age_days=7):
+        """Check if cache exists and is recent."""
+        cache_path = self._get_cache_path()
+        if not cache_path.exists():
+            return False
+
+        cache_age = datetime.now() - datetime.fromtimestamp(cache_path.stat().st_mtime)
+        return cache_age < timedelta(days=max_age_days)
+
+    # 2. Fetch CPI data
+    def fetch_cpi(self, years_back=5):
+        """Fetch CPI data from FRED API."""
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
+
+        url = "https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            "series_id": "CPIAUCSL",
+            "api_key": self.api_key,
+            "file_type": "json",
+            "observation_start": start_date,
+            "observation_end": end_date
+        }
+
+        # 6. Error handling
+        try:
+            response = requests.get(url, params=params, timeout=30)
+
+            if response.status_code == 401:
+                raise ValueError("Invalid API key")
+            elif response.status_code == 429:
+                raise ValueError("Rate limit exceeded - try again later")
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Failed to fetch data: {e}")
+
+    # 3. Parse JSON response
+    def parse_response(self, data):
+        """Parse FRED API response into DataFrame."""
+        observations = data.get("observations", [])
+
+        df = pd.DataFrame(observations)
+        df["date"] = pd.to_datetime(df["date"])
+        df["cpi"] = pd.to_numeric(df["value"], errors="coerce")
+
+        return df[["date", "cpi"]].dropna()
+
+    # 4. Calculate year-over-year inflation
+    def calculate_inflation(self, df):
+        """Add year-over-year inflation rate."""
+        df = df.sort_values("date").copy()
+
+        # YoY inflation: (CPI_now / CPI_12_months_ago - 1) * 100
+        df["cpi_12m_ago"] = df["cpi"].shift(12)
+        df["yoy_inflation"] = ((df["cpi"] / df["cpi_12m_ago"]) - 1) * 100
+
+        return df
+
+    # 5. Implement caching
+    def get_cpi_data(self, years_back=5, use_cache=True):
+        """Get CPI data with caching."""
+        cache_path = self._get_cache_path()
+
+        # Try cache first
+        if use_cache and self._is_cache_valid():
+            print("Loading from cache...")
+            return pd.read_csv(cache_path, parse_dates=["date"])
+
+        # Fetch fresh data
+        print("Fetching fresh data from FRED...")
+        raw_data = self.fetch_cpi(years_back)
+        df = self.parse_response(raw_data)
+        df = self.calculate_inflation(df)
+
+        # Save to cache
+        df.to_csv(cache_path, index=False)
+        print(f"Saved to cache: {cache_path}")
+
+        return df
+
+# Usage
+if __name__ == "__main__":
+    # Get API key from environment
+    api_key = os.environ.get("FRED_API_KEY")
+
+    if not api_key:
+        print("Please set FRED_API_KEY environment variable")
+    else:
+        pipeline = CPIPipeline(api_key)
+
+        try:
+            cpi_data = pipeline.get_cpi_data(years_back=5)
+
+            print("\nCPI Data (last 12 months):")
+            print(cpi_data.tail(12))
+
+            print("\nLatest YoY Inflation:")
+            latest = cpi_data.dropna().iloc[-1]
+            print(f"  {latest['date'].strftime('%B %Y')}: {latest['yoy_inflation']:.1f}%")
+
+        except ValueError as e:
+            print(f"API Error: {e}")
+        except ConnectionError as e:
+            print(f"Connection Error: {e}")
+```
+:::
+:::
+
+## Summary
+
+You've learned to work with APIs:
+
+- **REST Basics**: GET requests, query parameters, headers
+- **requests Library**: Making HTTP requests in Python
+- **FRED API**: Fetching economic data with `fredapi` or raw requests
+- **JSON Parsing**: Converting API responses to DataFrames
+- **Authentication**: API keys and bearer tokens
+- **Rate Limiting**: Respecting API limits with delays and retries
+- **Caching**: Saving responses locally to avoid repeated calls
+- **Error Handling**: Gracefully handling network and API errors
+
+Key insights:
+- Always check for an API before scraping
+- Store API keys securely (environment variables, not in code)
+- Implement caching to be a good API citizen
+- Handle errors gracefully with informative messages
+
+## Next Steps
+
+Continue to [Lesson 16: Web Scraping Basics](16-web-scraping.qmd) to learn how to extract data when no API is available.

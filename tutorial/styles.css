@@ -1,0 +1,108 @@
+/* Custom styles for Python for Financial Analysis tutorial */
+
+/* R comparison callouts - styled distinctly */
+.callout-r-comparison {
+  border-left-color: #276DC2 !important;  /* R blue */
+}
+
+.callout-r-comparison .callout-icon::before {
+  content: "R";
+  font-weight: bold;
+  font-family: monospace;
+}
+
+/* Exercise sections */
+.exercise-box {
+  background-color: #f8f9fa;
+  border: 2px solid #28a745;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+
+.exercise-box h4 {
+  color: #28a745;
+  margin-top: 0;
+}
+
+/* Solution toggle styling */
+.solution-toggle {
+  background-color: #e9ecef;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+/* Code comparison tables */
+.code-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.code-compare > div {
+  padding: 0.5rem;
+}
+
+.code-compare .lang-label {
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: #6c757d;
+}
+
+/* Concept boxes for financial analysis concepts */
+.concept-box {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.concept-box h4 {
+  color: white;
+  margin-top: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.3);
+  padding-bottom: 0.5rem;
+}
+
+/* PyCharm tips styling */
+.pycharm-tip {
+  border-left: 4px solid #21D789;  /* PyCharm green */
+  background-color: #f0fff4;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.pycharm-tip::before {
+  content: "PyCharm Tip: ";
+  font-weight: bold;
+  color: #21D789;
+}
+
+/* Learning objectives */
+.learning-objectives {
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 2rem;
+}
+
+.learning-objectives h4 {
+  color: #856404;
+  margin-top: 0;
+}
+
+.learning-objectives ul {
+  margin-bottom: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .code-compare {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,444 @@
+---
+title: "Working with Dates and Time Series"
+subtitle: "Lesson 7"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Convert strings to datetime with `pd.to_datetime()`
+- Extract date components (year, month, day)
+- Perform date arithmetic and calculate durations
+- Work with periods and date ranges
+- Calculate rolling statistics over time
+:::
+
+## Introduction
+
+Salary data is inherently time-based: we have snapshots at different dates, hire dates, and need to calculate tenure and salary changes over time. pandas has powerful datetime handling through the `datetime64` type and the `.dt` accessor.
+
+```{python}
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+# Create sample data with various date formats
+df = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004", "E005"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"],
+    "hire_date_str": ["2010-08-15", "2005-01-10", "2020-08-20", "2015-06-01", "2018-09-01"],
+    "snapshot_date": ["2024-01", "2024-01", "2024-01", "2024-01", "2024-01"],
+    "salary": [125000, 185000, 95000, 175000, 65000]
+})
+df
+```
+
+## Converting to Datetime
+
+### Using `pd.to_datetime()`
+
+```{python}
+# Convert string to datetime
+df["hire_date"] = pd.to_datetime(df["hire_date_str"])
+print(df["hire_date"])
+print(f"\nData type: {df['hire_date'].dtype}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# lubridate approach
+library(lubridate)
+df$hire_date <- ymd(df$hire_date_str)
+df$hire_date <- as.Date(df$hire_date_str)
+```
+:::
+
+### Handling Different Date Formats
+
+`pd.to_datetime()` is smart about parsing, but you can specify format explicitly:
+
+```{python}
+# Various formats pandas can parse automatically
+dates = pd.Series([
+    "2024-01-15",      # ISO format
+    "January 15, 2024", # Month name
+    "01/15/2024",      # US format
+    "15-01-2024",      # Day first
+])
+
+# Automatic parsing (pandas guesses)
+parsed = pd.to_datetime(dates)
+print(parsed)
+```
+
+```{python}
+# Explicit format for better performance and control
+df["snapshot"] = pd.to_datetime(df["snapshot_date"], format="%Y-%m")
+df["snapshot"]
+```
+
+### Common Format Codes
+
+| Code | Meaning | Example |
+|------|---------|---------|
+| `%Y` | 4-digit year | 2024 |
+| `%y` | 2-digit year | 24 |
+| `%m` | Month (01-12) | 01 |
+| `%d` | Day (01-31) | 15 |
+| `%B` | Full month name | January |
+| `%b` | Abbreviated month | Jan |
+| `%H` | Hour (00-23) | 14 |
+| `%M` | Minute (00-59) | 30 |
+
+## Extracting Date Components
+
+Use the `.dt` accessor to extract parts of dates:
+
+```{python}
+# Extract components
+df["hire_year"] = df["hire_date"].dt.year
+df["hire_month"] = df["hire_date"].dt.month
+df["hire_day"] = df["hire_date"].dt.day
+df["hire_weekday"] = df["hire_date"].dt.day_name()
+
+df[["last_name", "hire_date", "hire_year", "hire_month", "hire_weekday"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# lubridate
+year(df$hire_date)
+month(df$hire_date)
+day(df$hire_date)
+wday(df$hire_date, label = TRUE)
+```
+:::
+
+### Useful `.dt` Attributes
+
+```{python}
+# More dt attributes
+print("Quarter:", df["hire_date"].dt.quarter.values)
+print("Day of year:", df["hire_date"].dt.dayofyear.values)
+print("Week number:", df["hire_date"].dt.isocalendar().week.values)
+print("Is month end:", df["hire_date"].dt.is_month_end.values)
+```
+
+## Date Arithmetic
+
+### Calculating Durations
+
+```{python}
+# Calculate tenure in days
+today = pd.Timestamp("2024-06-01")
+df["tenure_days"] = (today - df["hire_date"]).dt.days
+
+# Convert to years (approximate)
+df["tenure_years"] = df["tenure_days"] / 365.25
+
+df[["last_name", "hire_date", "tenure_days", "tenure_years"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# lubridate
+today <- as.Date("2024-06-01")
+df$tenure_days <- as.numeric(today - df$hire_date)
+df$tenure_years <- interval(df$hire_date, today) / years(1)
+```
+:::
+
+### Adding/Subtracting Time
+
+```{python}
+# Add time using timedelta or DateOffset
+df["one_year_later"] = df["hire_date"] + pd.DateOffset(years=1)
+df["six_months_later"] = df["hire_date"] + pd.DateOffset(months=6)
+df["30_days_later"] = df["hire_date"] + pd.Timedelta(days=30)
+
+df[["last_name", "hire_date", "one_year_later", "six_months_later"]]
+```
+
+### Calculating Time Between Snapshots
+
+```{python}
+# Create multi-snapshot data
+snapshots = pd.DataFrame({
+    "employee_id": ["E001", "E001", "E001"],
+    "snapshot": pd.to_datetime(["2023-01-01", "2023-06-01", "2024-01-01"]),
+    "salary": [85000, 87000, 90000]
+})
+
+# Calculate days between snapshots
+snapshots["prev_snapshot"] = snapshots.groupby("employee_id")["snapshot"].shift(1)
+snapshots["days_between"] = (snapshots["snapshot"] - snapshots["prev_snapshot"]).dt.days
+snapshots
+```
+
+## Period Objects
+
+For data like "2024-01" that represents a month (not a specific day), use `Period`:
+
+```{python}
+# Create period from string
+period = pd.Period("2024-01", freq="M")
+print(f"Period: {period}")
+print(f"Start: {period.start_time}")
+print(f"End: {period.end_time}")
+```
+
+```{python}
+# Convert column to period
+df["snapshot_period"] = df["snapshot_date"].apply(lambda x: pd.Period(x, freq="M"))
+df["snapshot_period"]
+```
+
+### Period Arithmetic
+
+```{python}
+# Add months to period
+period = pd.Period("2024-01", freq="M")
+print(f"Current: {period}")
+print(f"Next month: {period + 1}")
+print(f"6 months later: {period + 6}")
+print(f"Previous quarter: {period.asfreq('Q') - 1}")
+```
+
+## Date Ranges
+
+Generate sequences of dates:
+
+```{python}
+# Daily range
+daily = pd.date_range(start="2024-01-01", end="2024-01-10", freq="D")
+print("Daily:", daily.tolist())
+```
+
+```{python}
+# Monthly range (first of month)
+monthly = pd.date_range(start="2024-01", periods=6, freq="MS")
+print("Monthly starts:", monthly.tolist())
+```
+
+```{python}
+# Business days
+business = pd.date_range(start="2024-01-01", periods=5, freq="B")
+print("Business days:", business.tolist())
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Base R
+seq(as.Date("2024-01-01"), as.Date("2024-01-10"), by = "day")
+
+# lubridate
+seq(ymd("2024-01-01"), ymd("2024-01-10"), by = "days")
+```
+:::
+
+## Rolling Calculations
+
+Calculate statistics over moving windows:
+
+```{python}
+# Time series of salary snapshots
+salary_history = pd.DataFrame({
+    "date": pd.date_range("2021-01", periods=8, freq="6MS"),
+    "median_salary": [75000, 76500, 78000, 79200, 80500, 82000, 84000, 86000]
+})
+
+# Rolling mean (3-period)
+salary_history["rolling_mean_3"] = salary_history["median_salary"].rolling(window=3).mean()
+
+# Rolling percent change
+salary_history["pct_change"] = salary_history["median_salary"].pct_change() * 100
+
+salary_history
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr/zoo
+library(zoo)
+df %>%
+  mutate(
+    rolling_mean = rollmean(salary, k = 3, fill = NA, align = "right"),
+    pct_change = (salary - lag(salary)) / lag(salary) * 100
+  )
+```
+:::
+
+## Filtering by Date
+
+```{python}
+# Sample data with dates
+data = pd.DataFrame({
+    "date": pd.date_range("2021-01-01", periods=20, freq="3MS"),
+    "value": range(20)
+})
+
+# Filter to 2023 and later
+recent = data[data["date"] >= "2023-01-01"]
+print("2023 and later:")
+print(recent)
+```
+
+```{python}
+# Filter to specific year
+year_2022 = data[data["date"].dt.year == 2022]
+print("\n2022 only:")
+print(year_2022)
+```
+
+```{python}
+# Filter to date range
+range_filter = data[(data["date"] >= "2022-06-01") & (data["date"] < "2023-06-01")]
+print("\nJun 2022 to Jun 2023:")
+print(range_filter)
+```
+
+## Practical Example: Salary Tenure Analysis
+
+```{python}
+# Comprehensive date analysis
+employees = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN"],
+    "hire_date": pd.to_datetime(["2010-08-15", "2005-01-10", "2020-08-20", "2015-06-01"]),
+    "salary": [125000, 185000, 95000, 175000]
+})
+
+# Current date for calculations
+analysis_date = pd.Timestamp("2024-06-01")
+
+# Calculate tenure metrics
+employees["tenure_years"] = ((analysis_date - employees["hire_date"]).dt.days / 365.25).round(1)
+employees["hire_decade"] = (employees["hire_date"].dt.year // 10) * 10
+employees["anniversary_this_year"] = employees["hire_date"].apply(
+    lambda x: x.replace(year=2024) if x.month <= 6 else x.replace(year=2025)
+)
+
+# Salary per year of tenure
+employees["salary_per_tenure_year"] = (employees["salary"] / employees["tenure_years"]).round(0)
+
+employees
+```
+
+## Quick Reference
+
+| Task | pandas | lubridate |
+|------|--------|-----------|
+| Parse string | `pd.to_datetime(s)` | `ymd(s)`, `mdy(s)` |
+| Extract year | `dt.year` | `year()` |
+| Extract month | `dt.month` | `month()` |
+| Extract day | `dt.day` | `day()` |
+| Day of week | `dt.day_name()` | `wday(label=TRUE)` |
+| Add days | `+ pd.Timedelta(days=n)` | `+ days(n)` |
+| Add months | `+ pd.DateOffset(months=n)` | `+ months(n)` |
+| Difference in days | `(d1 - d2).dt.days` | `as.numeric(d1 - d2)` |
+| Date range | `pd.date_range()` | `seq()` |
+| Rolling mean | `rolling(n).mean()` | `rollmean()` |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 7: Analyzing Salary Trends Over Time
+
+1. Create a DataFrame with 5 employees and their hire dates (various years)
+2. Calculate each employee's tenure in years as of today
+3. Group employees by the decade they were hired (2000s, 2010s, 2020s)
+4. Create a monthly date range from Jan 2023 to Dec 2024
+5. For a sample salary time series, calculate the rolling 3-month average
+6. Find employees who have their work anniversary this month
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+from datetime import date
+
+# 1. Create employee data with hire dates
+employees = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004", "E005"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"],
+    "hire_date": pd.to_datetime([
+        "2005-03-15", "2012-07-20", "2019-11-01", "2008-06-10", "2021-02-28"
+    ]),
+    "salary": [125000, 95000, 78000, 110000, 72000]
+})
+
+print("1. Employee data:")
+print(employees)
+
+# 2. Calculate tenure in years
+today = pd.Timestamp.today()
+employees["tenure_years"] = ((today - employees["hire_date"]).dt.days / 365.25).round(1)
+print("\n2. Tenure in years:")
+print(employees[["last_name", "hire_date", "tenure_years"]])
+
+# 3. Group by hire decade
+employees["hire_decade"] = (employees["hire_date"].dt.year // 10) * 10
+decade_summary = employees.groupby("hire_decade").agg({
+    "employee_id": "count",
+    "salary": "mean"
+}).rename(columns={"employee_id": "count", "salary": "avg_salary"})
+print("\n3. By decade hired:")
+print(decade_summary)
+
+# 4. Monthly date range
+monthly_range = pd.date_range(start="2023-01", end="2024-12", freq="MS")
+print("\n4. Monthly date range (first 6):")
+print(monthly_range[:6].tolist())
+
+# 5. Rolling average for salary time series
+salary_trend = pd.DataFrame({
+    "date": pd.date_range("2023-01", periods=12, freq="MS"),
+    "median_salary": [75000, 75500, 76000, 76200, 76800, 77500,
+                      78000, 78500, 79000, 79500, 80000, 80500]
+})
+salary_trend["rolling_3mo"] = salary_trend["median_salary"].rolling(3).mean()
+print("\n5. Rolling 3-month average:")
+print(salary_trend)
+
+# 6. Employees with anniversary this month
+current_month = today.month
+employees["anniversary_month"] = employees["hire_date"].dt.month
+anniversary_this_month = employees[employees["anniversary_month"] == current_month]
+print(f"\n6. Employees with anniversary in month {current_month}:")
+print(anniversary_this_month[["last_name", "hire_date"]])
+```
+:::
+:::
+
+## Summary
+
+You've learned to work with dates in pandas:
+
+- **`pd.to_datetime()`**: Parse strings to datetime
+- **`.dt` accessor**: Extract year, month, day, and other components
+- **Date arithmetic**: Calculate durations, add/subtract time
+- **`pd.Period`**: Represent time periods (months, quarters)
+- **`pd.date_range()`**: Generate date sequences
+- **Rolling calculations**: Moving averages and statistics
+
+Key differences from R:
+- pandas uses `.dt` accessor instead of lubridate functions
+- `pd.DateOffset` for month/year arithmetic vs lubridate's `months()`/`years()`
+- `Period` objects for representing time periods (no direct R equivalent)
+
+## Next Steps
+
+Continue to [Lesson 8: String Operations](08-string-operations.qmd) to learn text manipulation and cleaning.

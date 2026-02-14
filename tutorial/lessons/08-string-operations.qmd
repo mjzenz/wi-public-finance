@@ -1,0 +1,494 @@
+---
+title: "String Operations"
+subtitle: "Lesson 8"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Use the `.str` accessor for vectorized string operations
+- Apply common string methods (upper, lower, strip, replace)
+- Use regex with `str.extract()` and `str.replace()`
+- Handle case normalization challenges (UFAS vs Workday)
+- Clean messy text data efficiently
+:::
+
+## Introduction
+
+The UW salary data presents a real-world string cleaning challenge: the transition from UFAS to Workday changed name formatting from UPPERCASE to Title Case, and division names use different abbreviations. This lesson covers the tools you need to handle such inconsistencies.
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Sample data with string cleaning challenges
+df = pd.DataFrame({
+    "last_name_ufas": ["SMITH", "JOHNSON", "O'BRIEN", "WILLIAMS-JONES", "MC DONALD"],
+    "last_name_workday": ["Smith", "Johnson", "O'Brien", "Williams-Jones", "McDonald"],
+    "division_ufas": ["Coll of Ltrs & Sci", "Sch of Med & Public Health", "Coll of Engr"],
+    "division_workday": ["College of Letters & Science", "School of Medicine and Public Health", "College of Engineering"],
+    "jobcode": ["FA001U", "AS002A", "FA003X", "CL001N", "ET002"]
+})
+df
+```
+
+## The `.str` Accessor
+
+pandas provides vectorized string methods through the `.str` accessor:
+
+```{python}
+# Convert to uppercase
+df["upper_workday"] = df["last_name_workday"].str.upper()
+
+# Convert to lowercase
+df["lower_ufas"] = df["last_name_ufas"].str.lower()
+
+# Title case
+df["title_ufas"] = df["last_name_ufas"].str.title()
+
+df[["last_name_ufas", "last_name_workday", "upper_workday", "title_ufas"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# stringr approach
+library(stringr)
+str_to_upper(df$name)
+str_to_lower(df$name)
+str_to_title(df$name)
+
+# Base R
+toupper(df$name)
+tolower(df$name)
+```
+:::
+
+## Common String Methods
+
+### Stripping Whitespace
+
+```{python}
+messy = pd.Series(["  SMITH  ", "JOHNSON ", " WILLIAMS"])
+
+print("Original:", messy.tolist())
+print("Stripped:", messy.str.strip().tolist())
+print("Left strip:", messy.str.lstrip().tolist())
+print("Right strip:", messy.str.rstrip().tolist())
+```
+
+### String Length
+
+```{python}
+df["name_length"] = df["last_name_ufas"].str.len()
+df[["last_name_ufas", "name_length"]]
+```
+
+### Checking String Content
+
+```{python}
+# Contains a pattern
+df["has_hyphen"] = df["last_name_ufas"].str.contains("-")
+print("Contains hyphen:")
+print(df[["last_name_ufas", "has_hyphen"]])
+```
+
+```{python}
+# Starts with / ends with
+df["starts_mc"] = df["last_name_ufas"].str.startswith("MC")
+df["ends_s"] = df["last_name_ufas"].str.endswith("S")
+print("Starts with MC or ends with S:")
+print(df[["last_name_ufas", "starts_mc", "ends_s"]])
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# stringr
+str_detect(df$name, "-")
+str_starts(df$name, "MC")
+str_ends(df$name, "S")
+str_length(df$name)
+```
+:::
+
+## Replacing Text
+
+### Simple Replacement
+
+```{python}
+# Replace specific text
+divisions = df["division_ufas"].copy()
+divisions = divisions.str.replace("Coll", "College")
+divisions = divisions.str.replace("Ltrs", "Letters")
+divisions = divisions.str.replace("Sci", "Science")
+divisions = divisions.str.replace("Engr", "Engineering")
+print(divisions)
+```
+
+### Chained Replacements
+
+```{python}
+# Method chaining for multiple replacements
+cleaned = (
+    df["division_ufas"]
+    .str.replace("Coll", "College")
+    .str.replace("Ltrs", "Letters")
+    .str.replace("Sci", "Science")
+    .str.replace("Engr", "Engineering")
+    .str.replace("Sch", "School")
+    .str.replace("Med", "Medicine")
+)
+print(cleaned)
+```
+
+## Regular Expressions
+
+For more complex patterns, use regex:
+
+```{python}
+# Extract year from a string
+dates = pd.Series(["Hired 2020-08-15", "Started 2018-03-01", "Began 2015-11-20"])
+years = dates.str.extract(r"(\d{4})")
+print(years)
+```
+
+```{python}
+# Extract multiple groups
+pattern = r"(\d{4})-(\d{2})-(\d{2})"
+date_parts = dates.str.extract(pattern)
+date_parts.columns = ["year", "month", "day"]
+date_parts
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# stringr with regex
+str_extract(dates, "\\d{4}")
+str_match(dates, "(\\d{4})-(\\d{2})-(\\d{2})")
+```
+:::
+
+### Common Regex Patterns
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `\d` | Any digit | `\d{4}` matches "2024" |
+| `\w` | Word character | `\w+` matches "Smith" |
+| `\s` | Whitespace | `\s+` matches spaces/tabs |
+| `.` | Any character | `.*` matches anything |
+| `[A-Z]` | Capital letters | `[A-Z]+` matches "SMITH" |
+| `^` | Start of string | `^Dr` matches "Dr Smith" |
+| `$` | End of string | `son$` matches "Johnson" |
+
+### Regex Replacement
+
+```{python}
+# Remove letter suffixes from jobcodes (U, A, X, N)
+jobcodes = df["jobcode"].copy()
+print("Before:", jobcodes.tolist())
+
+# Remove single letter at end
+cleaned_codes = jobcodes.str.replace(r"[UAXN]$", "", regex=True)
+print("After:", cleaned_codes.tolist())
+```
+
+## Case Study: Name Normalization
+
+The UFAS to Workday transition changed name formatting. Let's handle this:
+
+```{python}
+# Create normalization function
+def normalize_name(name):
+    """Normalize name to lowercase for matching."""
+    if pd.isna(name):
+        return None
+    # Remove spaces in patterns like "MC DONALD" -> "MCDONALD"
+    name = name.replace(" ", "")
+    # Lowercase
+    return name.lower()
+
+# Apply to both formats
+df["name_normalized_ufas"] = df["last_name_ufas"].apply(normalize_name)
+df["name_normalized_workday"] = df["last_name_workday"].apply(normalize_name)
+
+# Check if they match
+df["names_match"] = df["name_normalized_ufas"] == df["name_normalized_workday"]
+
+df[["last_name_ufas", "last_name_workday", "name_normalized_ufas", "names_match"]]
+```
+
+## Case Study: Division Name Normalization
+
+Division names use different conventions:
+
+```{python}
+# Create a mapping for division abbreviations
+division_mapping = {
+    "Coll": "College",
+    "Ltrs": "Letters",
+    "Sci": "Science",
+    "Sch": "School",
+    "Med": "Medicine",
+    "Engr": "Engineering",
+    "&": "and",
+}
+
+def expand_abbreviations(text, mapping):
+    """Expand abbreviations in text."""
+    for abbrev, full in mapping.items():
+        text = text.replace(abbrev, full)
+    return text
+
+# Apply
+df["division_expanded"] = df["division_ufas"].apply(
+    lambda x: expand_abbreviations(x, division_mapping)
+)
+
+df[["division_ufas", "division_workday", "division_expanded"]]
+```
+
+### Building a Robust Normalizer
+
+```{python}
+import re
+
+def normalize_division(name):
+    """
+    Normalize division name for consistent comparison.
+
+    Steps:
+    1. Lowercase
+    2. Expand common abbreviations
+    3. Remove extra whitespace
+    4. Remove punctuation
+    """
+    if pd.isna(name):
+        return None
+
+    # Lowercase
+    name = name.lower()
+
+    # Expand abbreviations
+    expansions = [
+        (r"\bcoll\b", "college"),
+        (r"\bltrs\b", "letters"),
+        (r"\bsci\b", "science"),
+        (r"\bsch\b", "school"),
+        (r"\bmed\b", "medicine"),
+        (r"\bpub\b", "public"),
+        (r"\bhlth\b", "health"),
+        (r"\bengr\b", "engineering"),
+        (r"\badmin\b", "administration"),
+    ]
+
+    for pattern, replacement in expansions:
+        name = re.sub(pattern, replacement, name)
+
+    # Normalize "and" / "&"
+    name = name.replace("&", "and")
+
+    # Remove extra whitespace
+    name = " ".join(name.split())
+
+    return name
+
+# Test
+test_names = [
+    "Coll of Ltrs & Sci",
+    "College of Letters and Science",
+    "College of Letters & Science"
+]
+
+for n in test_names:
+    print(f"{n:40} -> {normalize_division(n)}")
+```
+
+## Splitting and Joining
+
+### Splitting Strings
+
+```{python}
+# Split on delimiter
+full_names = pd.Series(["SMITH, JOHN", "JOHNSON, MARY", "WILLIAMS, JAMES"])
+split = full_names.str.split(", ", expand=True)
+split.columns = ["last", "first"]
+split
+```
+
+```{python}
+# Access specific part without expanding
+full_names.str.split(", ").str[0]  # Last names only
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# tidyr
+separate(df, full_name, into = c("last", "first"), sep = ", ")
+
+# stringr
+str_split(names, ", ", simplify = TRUE)
+```
+:::
+
+### Joining Strings
+
+```{python}
+# Concatenate columns
+df["full_name"] = df["last_name_workday"] + ", " + df["last_name_workday"].str[0] + "."
+df["full_name"]
+```
+
+```{python}
+# Join list elements
+parts = pd.Series([["College", "of", "Engineering"], ["School", "of", "Business"]])
+parts.str.join(" ")
+```
+
+## Handling Missing Values
+
+String methods handle NaN gracefully:
+
+```{python}
+mixed = pd.Series(["SMITH", None, "JONES", np.nan, "WILLIAMS"])
+
+# NaN propagates but doesn't error
+print(mixed.str.upper())
+print(mixed.str.len())
+```
+
+### Filling Missing Values
+
+```{python}
+# Fill missing before string operations
+mixed.fillna("UNKNOWN").str.upper()
+```
+
+## Quick Reference
+
+| Task | pandas `.str` | stringr |
+|------|---------------|---------|
+| Uppercase | `.str.upper()` | `str_to_upper()` |
+| Lowercase | `.str.lower()` | `str_to_lower()` |
+| Title case | `.str.title()` | `str_to_title()` |
+| Strip whitespace | `.str.strip()` | `str_trim()` |
+| Contains | `.str.contains(pat)` | `str_detect(x, pat)` |
+| Replace | `.str.replace(old, new)` | `str_replace(x, old, new)` |
+| Extract | `.str.extract(pat)` | `str_extract(x, pat)` |
+| Split | `.str.split(sep)` | `str_split(x, sep)` |
+| Length | `.str.len()` | `str_length(x)` |
+| Starts with | `.str.startswith(s)` | `str_starts(x, s)` |
+| Ends with | `.str.endswith(s)` | `str_ends(x, s)` |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 8: Cleaning Division Names
+
+1. Create a DataFrame with 5 division names in abbreviated format
+2. Write a function that expands all abbreviations to full words
+3. Create a normalized version for comparison (lowercase, consistent spacing)
+4. Extract the first word of each division name
+5. Check which division names contain "Science" or "Medicine"
+6. Clean jobcodes by removing trailing letter suffixes (U, A, X, N)
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+import re
+
+# 1. Create data with abbreviated divisions
+df = pd.DataFrame({
+    "division": [
+        "Coll of Ltrs & Sci",
+        "Sch of Med & Pub Hlth",
+        "Coll of Engr",
+        "Sch of Bus",
+        "Coll of Ag & Life Sci"
+    ],
+    "jobcode": ["FA001U", "AS002A", "FA003X", "CL001N", "ET002"]
+})
+print("1. Original data:")
+print(df)
+
+# 2. Abbreviation expansion function
+def expand_abbreviations(text):
+    expansions = {
+        r"\bColl\b": "College",
+        r"\bLtrs\b": "Letters",
+        r"\bSci\b": "Science",
+        r"\bSch\b": "School",
+        r"\bMed\b": "Medicine",
+        r"\bPub\b": "Public",
+        r"\bHlth\b": "Health",
+        r"\bEngr\b": "Engineering",
+        r"\bBus\b": "Business",
+        r"\bAg\b": "Agricultural"
+    }
+    for pattern, replacement in expansions.items():
+        text = re.sub(pattern, replacement, text)
+    return text
+
+df["expanded"] = df["division"].apply(expand_abbreviations)
+print("\n2. Expanded names:")
+print(df[["division", "expanded"]])
+
+# 3. Normalized version
+def normalize(text):
+    text = text.lower()
+    text = text.replace("&", "and")
+    text = " ".join(text.split())  # Normalize whitespace
+    return text
+
+df["normalized"] = df["expanded"].apply(normalize)
+print("\n3. Normalized:")
+print(df[["expanded", "normalized"]])
+
+# 4. Extract first word
+df["first_word"] = df["expanded"].str.split().str[0]
+print("\n4. First word:")
+print(df[["expanded", "first_word"]])
+
+# 5. Contains Science or Medicine
+df["has_science"] = df["expanded"].str.contains("Science")
+df["has_medicine"] = df["expanded"].str.contains("Medicine")
+print("\n5. Contains Science or Medicine:")
+print(df[["expanded", "has_science", "has_medicine"]])
+
+# 6. Clean jobcodes
+df["jobcode_clean"] = df["jobcode"].str.replace(r"[UAXN]$", "", regex=True)
+print("\n6. Cleaned jobcodes:")
+print(df[["jobcode", "jobcode_clean"]])
+```
+:::
+:::
+
+## Summary
+
+You've learned to manipulate strings in pandas:
+
+- **`.str` accessor**: Vectorized string operations
+- **Case conversion**: `upper()`, `lower()`, `title()`
+- **Pattern matching**: `contains()`, `startswith()`, `endswith()`
+- **Replacement**: `replace()` with strings or regex
+- **Extraction**: `extract()` with regex groups
+- **Splitting/joining**: `split()`, `join()`, concatenation
+
+Key differences from R:
+- pandas uses `.str.method()` syntax vs stringr's `str_method(x, ...)`
+- Regex is built into pandas string methods
+- Method chaining is natural in pandas
+
+## Next Steps
+
+Continue to [Lesson 9: Inflation Adjustment and Real vs Nominal Values](09-inflation-adjustment.qmd) to learn how to adjust salaries for inflation using CPI data.

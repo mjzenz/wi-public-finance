@@ -1,0 +1,1125 @@
+---
+title: "Building Reusable Data Pipelines"
+subtitle: "Lesson 17"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Organize code into functions and modules
+- Use a configuration file pattern for settings
+- Implement error handling and logging
+- Cache expensive operations for performance
+- Structure a Python project for maintainability
+:::
+
+::: {.concept-box}
+#### The Annual Budget Cycle
+
+Understanding **when** your analysis is needed is as important as getting the analysis right. Public universities operate on a predictable annual cycle, and your data pipelines should align with it:
+
+- **July 1**: Fiscal year begins. New salary rates take effect. This is when your "current year" data resets.
+- **September–October**: Fall census date. Salary snapshots are typically taken from October payroll. This is your primary data collection point.
+- **November–January**: Budget planning begins. Deans and department chairs receive budget targets and begin building requests for the next fiscal year. **This is when your compensation analyses have the most impact.**
+- **February–April**: Budget hearings and negotiations. Provost's office reviews requests, makes allocation decisions. Peer comparison data and equity analyses directly inform these decisions.
+- **May–June**: Final budget approval. Raise pools announced, merit increases determined. Last chance for data-driven input.
+- **Biennial budget years (odd years in Wisconsin)**: The Governor's budget proposal and legislative session add a state-level cycle. UW System compiles budget requests 12-18 months before the biennium starts.
+
+Building reusable pipelines means your October data can be processed, analyzed, and presented to decision-makers by November — not March when it's too late. Automating the annual refresh cycle (load new snapshot → apply standard transformations → update dashboards → flag anomalies) turns your analysis from a one-off project into institutional infrastructure.
+:::
+
+## Introduction
+
+Moving from exploratory scripts to production-ready code requires thinking about:
+
+- **Reusability**: Can someone else (or future you) use this code?
+- **Maintainability**: Is it easy to update when requirements change?
+- **Reliability**: Does it handle errors gracefully?
+- **Performance**: Does it avoid redundant work?
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# R package structure
+mypackage/
+├── R/
+│   ├── load_data.R
+│   ├── process_data.R
+│   └── visualize.R
+├── data/
+├── DESCRIPTION
+└── NAMESPACE
+```
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from datetime import datetime
+import json
+import logging
+```
+
+## From Scripts to Functions
+
+Exploratory code often mixes logic together. Production code separates concerns.
+
+### Before: Script Approach
+
+```{python}
+#| eval: false
+# Typical exploratory script - everything in one place
+import pandas as pd
+
+df = pd.read_csv("data/salaries_2024.csv")
+df.columns = df.columns.str.lower().str.replace(" ", "_")
+df["date"] = pd.to_datetime(df["date"])
+df = df[df["salary"] > 0]
+df["salary_thousands"] = df["salary"] / 1000
+
+# ... analysis continues
+```
+
+### After: Function Approach
+
+```{python}
+def load_salary_data(filepath):
+    """Load salary data from CSV file.
+
+    Args:
+        filepath: Path to the CSV file
+
+    Returns:
+        DataFrame with standardized column names
+    """
+    df = pd.read_csv(filepath)
+    df.columns = df.columns.str.lower().str.replace(" ", "_")
+    return df
+
+
+def clean_salary_data(df):
+    """Clean and validate salary data.
+
+    Args:
+        df: Raw salary DataFrame
+
+    Returns:
+        Cleaned DataFrame with valid salaries only
+    """
+    df = df.copy()  # Don't modify original
+
+    # Parse dates
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    # Filter invalid salaries
+    if "salary" in df.columns:
+        df = df[df["salary"] > 0]
+
+    return df
+
+
+def add_derived_columns(df):
+    """Add calculated columns for analysis.
+
+    Args:
+        df: Cleaned salary DataFrame
+
+    Returns:
+        DataFrame with additional columns
+    """
+    df = df.copy()
+    df["salary_thousands"] = df["salary"] / 1000
+
+    if "fte" in df.columns:
+        df["fte_adjusted_salary"] = df["salary"] * df["fte"]
+
+    return df
+```
+
+### Using the Functions
+
+```{python}
+#| eval: false
+# Now the main script is clean and readable
+def main():
+    df = load_salary_data("data/salaries_2024.csv")
+    df = clean_salary_data(df)
+    df = add_derived_columns(df)
+
+    # Analysis code here...
+    return df
+
+if __name__ == "__main__":
+    main()
+```
+
+## Creating Modules
+
+A module is a `.py` file containing related functions. Group functions by purpose.
+
+### Project Structure
+
+```
+salary_analysis/
+├── __init__.py           # Makes this a package
+├── config.py             # Configuration settings
+├── data_loading.py       # Data loading functions
+├── cleaning.py           # Data cleaning functions
+├── analysis.py           # Analysis functions
+├── visualization.py      # Plotting functions
+└── utils.py              # Utility functions
+```
+
+### Example Module: `data_loading.py`
+
+```{python}
+# salary_analysis/data_loading.py
+"""Functions for loading salary data from various sources."""
+
+import pandas as pd
+from pathlib import Path
+
+
+def load_csv(filepath, date_columns=None):
+    """Load data from CSV with optional date parsing.
+
+    Args:
+        filepath: Path to CSV file
+        date_columns: List of columns to parse as dates
+
+    Returns:
+        DataFrame with standardized column names
+    """
+    df = pd.read_csv(filepath)
+    df.columns = df.columns.str.lower().str.replace(" ", "_")
+
+    if date_columns:
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    return df
+
+
+def load_multiple_csvs(directory, pattern="*.csv"):
+    """Load and concatenate multiple CSV files.
+
+    Args:
+        directory: Path to directory containing CSV files
+        pattern: Glob pattern for matching files
+
+    Returns:
+        Combined DataFrame from all matching files
+    """
+    path = Path(directory)
+    files = sorted(path.glob(pattern))
+
+    if not files:
+        raise FileNotFoundError(f"No files matching {pattern} in {directory}")
+
+    dfs = []
+    for file in files:
+        df = load_csv(file)
+        df["source_file"] = file.name
+        dfs.append(df)
+
+    return pd.concat(dfs, ignore_index=True)
+```
+
+### Importing from Modules
+
+```{python}
+#| eval: false
+# In your main script or notebook
+from salary_analysis.data_loading import load_csv, load_multiple_csvs
+from salary_analysis.cleaning import clean_salary_data
+from salary_analysis.analysis import calculate_percentiles
+
+df = load_csv("data/salaries.csv", date_columns=["hire_date", "snapshot_date"])
+df = clean_salary_data(df)
+results = calculate_percentiles(df, "salary", by="division")
+```
+
+## The Config Pattern
+
+Separate configuration from code. This makes it easy to change settings without modifying code.
+
+### `config.py`
+
+```{python}
+# salary_analysis/config.py
+"""Configuration settings for salary analysis."""
+
+from pathlib import Path
+
+# Paths
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+CACHE_DIR = PROJECT_ROOT / ".cache"
+
+# Data settings
+DEFAULT_DATE_COLUMNS = ["hire_date", "snapshot_date", "termination_date"]
+SALARY_COLUMN = "salary"
+FTE_COLUMN = "fte"
+
+# CPI settings
+CPI_BASE_DATE = "2021-11-01"
+CPI_BASE_VALUE = 277.948
+
+# Analysis settings
+OUTLIER_IQR_MULTIPLIER = 1.5
+MIN_SALARY_THRESHOLD = 1000  # Filter likely errors
+
+# Visualization settings
+WONG_PALETTE = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                "#0072B2", "#D55E00", "#CC79A7"]
+
+# Ensure directories exist
+for dir_path in [DATA_DIR, OUTPUT_DIR, CACHE_DIR]:
+    dir_path.mkdir(parents=True, exist_ok=True)
+```
+
+### Using Configuration
+
+```{python}
+#| eval: false
+# In other modules
+from salary_analysis.config import (
+    DATA_DIR, CPI_BASE_VALUE, MIN_SALARY_THRESHOLD, WONG_PALETTE
+)
+
+def load_salary_data():
+    filepath = DATA_DIR / "salaries_2024.csv"
+    df = pd.read_csv(filepath)
+    df = df[df["salary"] >= MIN_SALARY_THRESHOLD]
+    return df
+```
+
+### Environment-Specific Config
+
+```{python}
+# config.py with environment support
+import os
+from pathlib import Path
+
+# Detect environment
+ENV = os.environ.get("SALARY_ENV", "development")
+
+# Base paths
+if ENV == "production":
+    DATA_DIR = Path("/data/salary_analysis")
+    LOG_LEVEL = "WARNING"
+else:
+    DATA_DIR = Path(__file__).parent.parent / "data"
+    LOG_LEVEL = "DEBUG"
+
+# API keys from environment (never hardcode!)
+FRED_API_KEY = os.environ.get("FRED_API_KEY")
+```
+
+::: {.pycharm-tip}
+PyCharm's refactoring tools (right-click → Refactor → Extract Method/Variable) help you restructure code quickly. Use "Rename" (Shift+F6) to safely rename variables across all usages.
+:::
+
+## Error Handling
+
+Good error handling makes code more robust and easier to debug.
+
+### Basic Try/Except
+
+```{python}
+def load_data_safely(filepath):
+    """Load data with error handling."""
+    try:
+        df = pd.read_csv(filepath)
+        return df
+    except FileNotFoundError:
+        print(f"File not found: {filepath}")
+        return None
+    except pd.errors.EmptyDataError:
+        print(f"File is empty: {filepath}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error loading {filepath}: {e}")
+        return None
+```
+
+### Custom Exceptions
+
+```{python}
+class SalaryDataError(Exception):
+    """Base exception for salary data errors."""
+    pass
+
+
+class DataValidationError(SalaryDataError):
+    """Raised when data fails validation."""
+    pass
+
+
+class MissingColumnError(SalaryDataError):
+    """Raised when required column is missing."""
+    pass
+
+
+def validate_salary_data(df, required_columns):
+    """Validate that DataFrame has required columns."""
+    missing = set(required_columns) - set(df.columns)
+
+    if missing:
+        raise MissingColumnError(f"Missing required columns: {missing}")
+
+    if df.empty:
+        raise DataValidationError("DataFrame is empty")
+
+    if "salary" in df.columns and (df["salary"] < 0).any():
+        raise DataValidationError("Negative salaries found")
+
+    return True
+```
+
+### Using Custom Exceptions
+
+```{python}
+def process_salary_file(filepath):
+    """Process a salary file with comprehensive error handling."""
+    try:
+        df = pd.read_csv(filepath)
+        validate_salary_data(df, ["employee_id", "salary", "division"])
+
+        # Process data...
+        return df
+
+    except FileNotFoundError:
+        print(f"ERROR: File not found: {filepath}")
+        raise
+
+    except MissingColumnError as e:
+        print(f"ERROR: Invalid data format: {e}")
+        raise
+
+    except DataValidationError as e:
+        print(f"ERROR: Data validation failed: {e}")
+        raise
+```
+
+## Logging
+
+Logging is better than `print()` for production code.
+
+```{python}
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("salary_analysis.log"),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+
+logger = logging.getLogger(__name__)
+```
+
+### Using the Logger
+
+```{python}
+def load_and_process_data(filepath):
+    """Load and process salary data with logging."""
+    logger.info(f"Loading data from {filepath}")
+
+    try:
+        df = pd.read_csv(filepath)
+        logger.info(f"Loaded {len(df)} records")
+
+        # Validation
+        initial_count = len(df)
+        df = df[df["salary"] > 0]
+        filtered_count = initial_count - len(df)
+
+        if filtered_count > 0:
+            logger.warning(f"Filtered {filtered_count} records with invalid salary")
+
+        logger.debug(f"Columns: {list(df.columns)}")
+
+        return df
+
+    except Exception as e:
+        logger.error(f"Failed to load data: {e}", exc_info=True)
+        raise
+
+# Example output:
+# 2024-01-15 10:30:45 - __main__ - INFO - Loading data from data/salaries.csv
+# 2024-01-15 10:30:46 - __main__ - INFO - Loaded 15000 records
+# 2024-01-15 10:30:46 - __main__ - WARNING - Filtered 23 records with invalid salary
+```
+
+### Log Levels
+
+| Level | Use Case |
+|-------|----------|
+| DEBUG | Detailed diagnostic info |
+| INFO | Confirmation of normal operation |
+| WARNING | Something unexpected but not critical |
+| ERROR | Serious problem, operation failed |
+| CRITICAL | System-wide failure |
+
+## Caching Strategies
+
+Avoid repeating expensive operations.
+
+### Simple File Cache
+
+```{python}
+from datetime import datetime, timedelta
+import pickle
+
+class FileCache:
+    """Simple file-based cache for DataFrames."""
+
+    def __init__(self, cache_dir=".cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_path(self, key):
+        """Get cache file path for a key."""
+        return self.cache_dir / f"{key}.pkl"
+
+    def get(self, key, max_age_hours=24):
+        """Get cached value if it exists and is fresh."""
+        path = self._get_path(key)
+
+        if not path.exists():
+            return None
+
+        # Check age
+        mtime = datetime.fromtimestamp(path.stat().st_mtime)
+        age = datetime.now() - mtime
+
+        if age > timedelta(hours=max_age_hours):
+            logger.debug(f"Cache expired for {key}")
+            return None
+
+        logger.debug(f"Cache hit for {key}")
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    def set(self, key, value):
+        """Store value in cache."""
+        path = self._get_path(key)
+        with open(path, "wb") as f:
+            pickle.dump(value, f)
+        logger.debug(f"Cached {key}")
+
+    def clear(self):
+        """Clear all cached data."""
+        for path in self.cache_dir.glob("*.pkl"):
+            path.unlink()
+        logger.info("Cache cleared")
+```
+
+### Using the Cache
+
+```{python}
+cache = FileCache()
+
+def get_salary_data(year, force_refresh=False):
+    """Get salary data, using cache if available."""
+    cache_key = f"salary_data_{year}"
+
+    # Try cache first (unless forcing refresh)
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    # Load fresh data
+    logger.info(f"Loading fresh data for {year}")
+    df = load_and_process_data(f"data/salaries_{year}.csv")
+
+    # Cache for next time
+    cache.set(cache_key, df)
+
+    return df
+```
+
+### Memoization with functools
+
+```{python}
+from functools import lru_cache
+
+@lru_cache(maxsize=100)
+def calculate_cpi_adjustment(cpi_current, cpi_base=277.948):
+    """Calculate CPI adjustment factor (cached)."""
+    return cpi_base / cpi_current
+
+# First call calculates
+result1 = calculate_cpi_adjustment(314.796)
+
+# Second call uses cache
+result2 = calculate_cpi_adjustment(314.796)  # Instant!
+```
+
+## Complete Pipeline Example
+
+Let's put it all together into a complete, production-ready pipeline.
+
+### Project Structure
+
+```
+uw_salary_analysis/
+├── __init__.py
+├── config.py
+├── data/
+│   ├── __init__.py
+│   ├── loading.py
+│   └── cleaning.py
+├── analysis/
+│   ├── __init__.py
+│   ├── compensation.py
+│   └── workforce.py
+├── utils/
+│   ├── __init__.py
+│   ├── cache.py
+│   └── logging.py
+├── main.py
+└── requirements.txt
+```
+
+### `main.py`
+
+```{python}
+#| eval: false
+"""Main entry point for UW Salary Analysis pipeline."""
+
+import argparse
+import logging
+from pathlib import Path
+
+from uw_salary_analysis.config import DATA_DIR, OUTPUT_DIR
+from uw_salary_analysis.data.loading import load_salary_data
+from uw_salary_analysis.data.cleaning import clean_and_validate
+from uw_salary_analysis.analysis.compensation import (
+    calculate_percentiles,
+    analyze_salary_equity
+)
+from uw_salary_analysis.analysis.workforce import calculate_fte_trends
+from uw_salary_analysis.utils.logging import setup_logging
+
+logger = logging.getLogger(__name__)
+
+
+def run_analysis(year: int, output_format: str = "csv"):
+    """Run complete salary analysis pipeline.
+
+    Args:
+        year: Year to analyze
+        output_format: Output format (csv, parquet, or excel)
+
+    Returns:
+        Dictionary of result DataFrames
+    """
+    logger.info(f"Starting analysis for {year}")
+
+    # Load data
+    input_file = DATA_DIR / f"salaries_{year}.csv"
+    df = load_salary_data(input_file)
+    logger.info(f"Loaded {len(df)} records")
+
+    # Clean data
+    df = clean_and_validate(df)
+    logger.info(f"After cleaning: {len(df)} records")
+
+    # Run analyses
+    results = {
+        "percentiles": calculate_percentiles(df, by="division"),
+        "equity": analyze_salary_equity(df),
+        "fte_trends": calculate_fte_trends(df)
+    }
+
+    # Save results
+    for name, result_df in results.items():
+        output_path = OUTPUT_DIR / f"{name}_{year}.{output_format}"
+        save_dataframe(result_df, output_path, output_format)
+        logger.info(f"Saved {name} to {output_path}")
+
+    logger.info("Analysis complete")
+    return results
+
+
+def save_dataframe(df, path, format):
+    """Save DataFrame in specified format."""
+    if format == "csv":
+        df.to_csv(path, index=False)
+    elif format == "parquet":
+        df.to_parquet(path)
+    elif format == "excel":
+        df.to_excel(path, index=False)
+    else:
+        raise ValueError(f"Unknown format: {format}")
+
+
+def main():
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(description="UW Salary Analysis")
+    parser.add_argument("year", type=int, help="Year to analyze")
+    parser.add_argument("--format", choices=["csv", "parquet", "excel"],
+                        default="csv", help="Output format")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose logging")
+
+    args = parser.parse_args()
+
+    # Setup logging
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    setup_logging(level=log_level)
+
+    # Run analysis
+    try:
+        run_analysis(args.year, args.format)
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}", exc_info=True)
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Running the Pipeline
+
+```bash
+# From command line
+python -m uw_salary_analysis.main 2024 --format csv
+
+# With verbose output
+python -m uw_salary_analysis.main 2024 -v
+
+# From Python
+from uw_salary_analysis.main import run_analysis
+results = run_analysis(2024)
+```
+
+## Testing Your Code
+
+Write tests to ensure your functions work correctly.
+
+```{python}
+#| eval: false
+# tests/test_cleaning.py
+import pytest
+import pandas as pd
+from uw_salary_analysis.data.cleaning import clean_salary_data, validate_salary_data
+from uw_salary_analysis.data.cleaning import MissingColumnError
+
+def test_clean_salary_data_removes_negative():
+    """Test that negative salaries are removed."""
+    df = pd.DataFrame({
+        "employee_id": [1, 2, 3],
+        "salary": [50000, -1000, 75000]
+    })
+
+    result = clean_salary_data(df)
+
+    assert len(result) == 2
+    assert (result["salary"] > 0).all()
+
+
+def test_validate_raises_on_missing_column():
+    """Test that missing columns raise appropriate error."""
+    df = pd.DataFrame({"employee_id": [1, 2]})
+
+    with pytest.raises(MissingColumnError):
+        validate_salary_data(df, required_columns=["employee_id", "salary"])
+
+
+def test_clean_handles_empty_dataframe():
+    """Test that empty DataFrames are handled gracefully."""
+    df = pd.DataFrame(columns=["employee_id", "salary"])
+
+    result = clean_salary_data(df)
+
+    assert len(result) == 0
+```
+
+```bash
+# Run tests with pytest
+pytest tests/ -v
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 17: Refactor to a Module
+
+Take the code you've written throughout this tutorial and:
+
+1. Create a `salary_analysis.py` module with reusable functions
+2. Add a `config.py` for data paths and settings
+3. Add input validation to your data loading function
+4. Implement caching for expensive operations
+5. Add logging throughout the pipeline
+6. Write docstrings for each function
+
+::: {.callout-note collapse="true"}
+## Solution
+
+Create three files:
+
+**`config.py`**
+```{python}
+#| eval: false
+"""Configuration for salary analysis."""
+
+from pathlib import Path
+import os
+
+# Paths
+PROJECT_ROOT = Path(__file__).parent
+DATA_DIR = PROJECT_ROOT / "data"
+CACHE_DIR = PROJECT_ROOT / ".cache"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+
+# Create directories
+for d in [DATA_DIR, CACHE_DIR, OUTPUT_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
+# Analysis settings
+MIN_SALARY = 1000
+CPI_BASE_DATE = "2021-11-01"
+CPI_BASE_VALUE = 277.948
+
+# API (from environment)
+FRED_API_KEY = os.environ.get("FRED_API_KEY")
+
+# Logging
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+```
+
+**`salary_analysis.py`**
+```{python}
+#| eval: false
+"""Reusable salary analysis functions."""
+
+import pandas as pd
+import numpy as np
+import logging
+import pickle
+from pathlib import Path
+from datetime import datetime, timedelta
+
+from config import DATA_DIR, CACHE_DIR, MIN_SALARY, CPI_BASE_VALUE
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+# --- Custom Exceptions ---
+
+class SalaryDataError(Exception):
+    """Base exception for salary data errors."""
+    pass
+
+
+class ValidationError(SalaryDataError):
+    """Data validation error."""
+    pass
+
+
+# --- Caching ---
+
+class Cache:
+    """Simple file-based cache."""
+
+    def __init__(self, cache_dir=CACHE_DIR):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+
+    def get(self, key, max_age_hours=24):
+        path = self.cache_dir / f"{key}.pkl"
+        if not path.exists():
+            return None
+
+        age = datetime.now() - datetime.fromtimestamp(path.stat().st_mtime)
+        if age > timedelta(hours=max_age_hours):
+            return None
+
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    def set(self, key, value):
+        path = self.cache_dir / f"{key}.pkl"
+        with open(path, "wb") as f:
+            pickle.dump(value, f)
+
+
+cache = Cache()
+
+
+# --- Data Loading ---
+
+def load_salary_data(filepath, use_cache=True):
+    """Load salary data from CSV file.
+
+    Args:
+        filepath: Path to CSV file
+        use_cache: Whether to use cached data if available
+
+    Returns:
+        DataFrame with salary data
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValidationError: If data validation fails
+    """
+    filepath = Path(filepath)
+    cache_key = f"salary_{filepath.stem}"
+
+    # Try cache
+    if use_cache:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"Using cached data for {filepath.name}")
+            return cached
+
+    # Load fresh
+    logger.info(f"Loading data from {filepath}")
+
+    if not filepath.exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+
+    df = pd.read_csv(filepath)
+    df.columns = df.columns.str.lower().str.replace(" ", "_")
+
+    # Validate
+    validate_data(df)
+
+    # Clean
+    df = clean_data(df)
+
+    # Cache
+    cache.set(cache_key, df)
+
+    logger.info(f"Loaded and cached {len(df)} records")
+    return df
+
+
+def validate_data(df):
+    """Validate salary data.
+
+    Args:
+        df: DataFrame to validate
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    required_cols = {"salary"}
+    missing = required_cols - set(df.columns)
+
+    if missing:
+        raise ValidationError(f"Missing required columns: {missing}")
+
+    if df.empty:
+        raise ValidationError("DataFrame is empty")
+
+    logger.debug("Data validation passed")
+
+
+def clean_data(df):
+    """Clean salary data.
+
+    Args:
+        df: Raw DataFrame
+
+    Returns:
+        Cleaned DataFrame
+    """
+    df = df.copy()
+    initial_count = len(df)
+
+    # Filter invalid salaries
+    df = df[df["salary"] >= MIN_SALARY]
+
+    # Parse dates
+    date_cols = [c for c in df.columns if "date" in c.lower()]
+    for col in date_cols:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    filtered = initial_count - len(df)
+    if filtered > 0:
+        logger.warning(f"Removed {filtered} records with invalid salary")
+
+    return df
+
+
+# --- Analysis Functions ---
+
+def calculate_real_salary(df, cpi_column="cpi", base_cpi=CPI_BASE_VALUE):
+    """Calculate inflation-adjusted salary.
+
+    Args:
+        df: DataFrame with salary and CPI columns
+        cpi_column: Name of CPI column
+        base_cpi: Base CPI value for adjustment
+
+    Returns:
+        DataFrame with real_salary column added
+    """
+    df = df.copy()
+    df["cpi_index"] = base_cpi / df[cpi_column]
+    df["real_salary"] = (df["salary"] * df["cpi_index"]).round(0)
+
+    logger.info(f"Calculated real salaries with base CPI {base_cpi}")
+    return df
+
+
+def calculate_percentiles(df, salary_col="salary", by=None):
+    """Calculate salary percentiles.
+
+    Args:
+        df: DataFrame with salary data
+        salary_col: Name of salary column
+        by: Optional grouping column
+
+    Returns:
+        DataFrame with percentile statistics
+    """
+    percentiles = [0.10, 0.25, 0.50, 0.75, 0.90]
+
+    if by:
+        result = df.groupby(by)[salary_col].describe(percentiles=percentiles)
+    else:
+        result = df[salary_col].describe(percentiles=percentiles)
+
+    logger.info(f"Calculated percentiles{f' by {by}' if by else ''}")
+    return result
+
+
+def identify_outliers(df, salary_col="salary", iqr_multiplier=1.5):
+    """Identify salary outliers using IQR method.
+
+    Args:
+        df: DataFrame with salary data
+        salary_col: Name of salary column
+        iqr_multiplier: IQR multiplier for outlier threshold
+
+    Returns:
+        DataFrame with is_outlier column added
+    """
+    df = df.copy()
+
+    q1 = df[salary_col].quantile(0.25)
+    q3 = df[salary_col].quantile(0.75)
+    iqr = q3 - q1
+
+    lower = q1 - iqr_multiplier * iqr
+    upper = q3 + iqr_multiplier * iqr
+
+    df["is_outlier"] = (df[salary_col] < lower) | (df[salary_col] > upper)
+
+    n_outliers = df["is_outlier"].sum()
+    logger.info(f"Identified {n_outliers} outliers ({n_outliers/len(df)*100:.1f}%)")
+
+    return df
+
+
+# --- Main Pipeline ---
+
+def run_pipeline(filepath, output_dir=None):
+    """Run complete salary analysis pipeline.
+
+    Args:
+        filepath: Path to input CSV
+        output_dir: Directory for output files (optional)
+
+    Returns:
+        Dictionary of analysis results
+    """
+    logger.info("Starting salary analysis pipeline")
+
+    # Load and clean
+    df = load_salary_data(filepath)
+
+    # Analyze
+    results = {
+        "percentiles": calculate_percentiles(df, by="division" if "division" in df.columns else None),
+        "data_with_outliers": identify_outliers(df)
+    }
+
+    # Save if output_dir specified
+    if output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
+
+        for name, data in results.items():
+            path = output_dir / f"{name}.csv"
+            if isinstance(data, pd.DataFrame):
+                data.to_csv(path)
+            else:
+                pd.DataFrame(data).to_csv(path)
+            logger.info(f"Saved {name} to {path}")
+
+    logger.info("Pipeline complete")
+    return results
+
+
+if __name__ == "__main__":
+    # Example usage
+    import sys
+
+    if len(sys.argv) > 1:
+        results = run_pipeline(sys.argv[1], output_dir="output")
+    else:
+        print("Usage: python salary_analysis.py <input_file.csv>")
+```
+
+**Usage:**
+```python
+from salary_analysis import load_salary_data, calculate_percentiles, run_pipeline
+
+# Load data
+df = load_salary_data("data/salaries_2024.csv")
+
+# Analyze
+percentiles = calculate_percentiles(df, by="division")
+print(percentiles)
+
+# Or run full pipeline
+results = run_pipeline("data/salaries_2024.csv", output_dir="output")
+```
+:::
+:::
+
+## Summary
+
+You've learned to build production-ready data pipelines:
+
+- **Functions**: Single-purpose, well-documented, reusable
+- **Modules**: Organized code by purpose
+- **Configuration**: Separate settings from logic
+- **Error Handling**: Custom exceptions, graceful failures
+- **Logging**: Track execution, debug issues
+- **Caching**: Avoid redundant computation
+- **Testing**: Verify code works correctly
+
+Key principles:
+- Write code for future you (who won't remember)
+- Fail fast with clear error messages
+- Log important events
+- Cache expensive operations
+- Test critical functions
+
+## Next Steps
+
+Continue to [Lesson 18: Capstone: Complete Analysis Report](18-capstone.qmd) to apply everything you've learned to a comprehensive project.

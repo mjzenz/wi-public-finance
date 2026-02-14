@@ -1,0 +1,708 @@
+---
+title: "Statistical Testing for Equity"
+subtitle: "Lesson 21"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Formulate hypothesis tests for salary equity questions
+- Conduct t-tests and ANOVA using `scipy.stats`
+- Build and interpret OLS regression models with `statsmodels`
+- Apply Bonferroni correction for multiple comparisons
+- Calculate Cohen's d to assess practical significance
+- Create coefficient plots and forest plots to communicate results
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### When Do You Need Statistical Testing?
+
+Descriptive statistics (means, medians, Gini coefficients) tell you *what* salary differences exist. Statistical testing tells you *whether those differences are likely real* or could have arisen by chance.
+
+You need formal tests when:
+
+- **Making policy claims**: "Division X pays significantly less than Division Y"
+- **Controlling for confounders**: Is the gap due to division, or due to differences in seniority and title?
+- **Defending decisions**: Budget committees and auditors expect p-values and confidence intervals
+- **Comparing many groups**: With 10 divisions, some differences will appear by chance alone
+:::
+
+::: {.concept-box}
+#### OFCCP and Regulatory Standards for Equity Testing
+
+Statistical testing for salary equity isn't just good practice — it's a **regulatory requirement** for federal contractors, which includes virtually all research universities:
+
+**OFCCP methodology**: The Office of Federal Contract Compliance Programs (part of the U.S. Department of Labor) audits compensation practices using regression-based analysis. Their standard approach:
+
+1. Group employees into **similarly situated employee groupings (SSEGs)** — people doing similar work under similar conditions
+2. Run regression controlling for legitimate pay factors (experience, education, performance, department)
+3. Flag any protected class (gender, race) coefficient that exceeds **2 standard deviations** — the practical significance threshold for enforcement action
+4. Investigate flagged groups for remediation
+
+**The "tainted variable" problem**: Not every control variable is legitimate. If women were historically hired at lower salaries due to biased negotiation practices, then "years since hire" interacted with starting salary perpetuates that bias. Including "prior salary" as a control may violate Equal Pay Act principles — several states now ban asking about salary history for this reason. When building your regression models, think carefully about whether each variable is a **legitimate business factor** or a **proxy for past discrimination**.
+
+**Practical significance vs. statistical significance**: A p-value of 0.03 on a gender coefficient of $500 may be statistically significant but practically small. Conversely, a $5,000 gap that's not significant at p < 0.05 (due to small sample size) may still warrant investigation. OFCCP uses both the 2-SD rule and practical dollar thresholds. Your analysis should report both.
+
+The regression techniques in this lesson directly map to the methodology used in OFCCP audits and in proactive pay equity studies conducted by institutional HR/legal teams.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats
+
+# Wong colorblind-safe palette
+WONG = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]
+
+# Generate realistic salary data
+np.random.seed(2024)
+
+divisions = ["L&S", "Engineering", "Medicine", "Business", "Education"]
+titles = ["Assistant Professor", "Associate Professor", "Full Professor"]
+
+records = []
+for i in range(1200):
+    div = np.random.choice(divisions, p=[0.30, 0.20, 0.25, 0.10, 0.15])
+    title = np.random.choice(titles, p=[0.45, 0.30, 0.25])
+    years_service = np.random.exponential(7)
+    years_service = round(min(years_service, 35), 1)
+
+    # Base salary depends on title
+    base = {"Assistant Professor": 78000, "Associate Professor": 95000,
+            "Full Professor": 125000}[title]
+
+    # Division premium
+    div_premium = {"L&S": 0, "Engineering": 12000, "Medicine": 18000,
+                   "Business": 15000, "Education": -5000}[div]
+
+    # Seniority bump: $800 per year of service
+    seniority = years_service * 800
+
+    # Random noise
+    noise = np.random.normal(0, 8000)
+
+    salary = base + div_premium + seniority + noise
+    salary = max(salary, 45000)
+
+    records.append({
+        "division": div,
+        "title": title,
+        "years_service": years_service,
+        "salary": round(salary, 0)
+    })
+
+df = pd.DataFrame(records)
+print(f"Employees: {len(df)}")
+print(df.groupby("division")["salary"].describe()[["count", "mean", "std"]].round(0))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# t-test in R
+t.test(salary ~ division, data = df,
+       subset = division %in% c("L&S", "Medicine"))
+
+# Linear model in R
+model <- lm(salary ~ division + title + years_service, data = df)
+summary(model)
+```
+:::
+
+## Hypothesis Testing with t-Tests
+
+### Independent Samples t-Test
+
+The most common equity question: do two groups have different average salaries?
+
+```{python}
+# Compare L&S vs Medicine salaries
+ls_salaries = df[df["division"] == "L&S"]["salary"]
+med_salaries = df[df["division"] == "Medicine"]["salary"]
+
+# Two-sample independent t-test (Welch's, unequal variance)
+t_stat, p_value = stats.ttest_ind(ls_salaries, med_salaries, equal_var=False)
+
+print("H0: Mean salary in L&S = Mean salary in Medicine")
+print("H1: Mean salary in L&S != Mean salary in Medicine")
+print(f"\n  L&S mean:      ${ls_salaries.mean():,.0f}  (n={len(ls_salaries)})")
+print(f"  Medicine mean: ${med_salaries.mean():,.0f}  (n={len(med_salaries)})")
+print(f"  Difference:    ${med_salaries.mean() - ls_salaries.mean():,.0f}")
+print(f"\n  t-statistic: {t_stat:.3f}")
+print(f"  p-value:     {p_value:.6f}")
+print(f"\n  Conclusion: {'Reject H0' if p_value < 0.05 else 'Fail to reject H0'} at alpha=0.05")
+```
+
+::: {.concept-box}
+#### Choosing the Right t-Test
+
+| Scenario | Test | `scipy.stats` function |
+|----------|------|----------------------|
+| Two independent groups | Welch's t-test | `ttest_ind(a, b, equal_var=False)` |
+| Same individuals, two time points | Paired t-test | `ttest_rel(before, after)` |
+| One group vs a known value | One-sample t-test | `ttest_1samp(a, popmean)` |
+
+Always use `equal_var=False` (Welch's) unless you have strong reason to assume equal variances. It is more robust and is the default in R's `t.test()`.
+:::
+
+### Paired t-Test Example
+
+Compare salaries before and after a policy change for the same employees.
+
+```{python}
+# Simulate a 3% raise for Education division
+np.random.seed(99)
+n_paired = 150
+before = np.random.normal(70000, 12000, n_paired)
+after = before * 1.03 + np.random.normal(0, 2000, n_paired)  # 3% raise + noise
+
+t_stat, p_value = stats.ttest_rel(before, after)
+
+print("Paired t-test: Did the raise significantly change salaries?")
+print(f"  Mean before: ${before.mean():,.0f}")
+print(f"  Mean after:  ${after.mean():,.0f}")
+print(f"  Mean change: ${(after - before).mean():,.0f}")
+print(f"  t = {t_stat:.3f}, p = {p_value:.6f}")
+```
+
+### One-Way ANOVA
+
+When comparing more than two groups, use ANOVA before pairwise tests.
+
+```{python}
+# Compare salary across all 5 divisions
+groups = [group["salary"].values for _, group in df.groupby("division")]
+
+f_stat, p_value = stats.f_oneway(*groups)
+
+print("One-Way ANOVA: Do any divisions differ in mean salary?")
+print(f"  F-statistic: {f_stat:.2f}")
+print(f"  p-value:     {p_value:.2e}")
+print(f"\n  Conclusion: {'At least one division differs' if p_value < 0.05 else 'No significant difference'}")
+```
+
+::: {.pycharm-tip}
+PyCharm's Scientific Mode displays `scipy.stats` test results in the variable explorer. Run a test, then click on the result object in the Variables pane to inspect the statistic and p-value without printing.
+:::
+
+## Multiple Regression with statsmodels
+
+t-Tests compare one factor at a time. Regression lets you control for multiple factors simultaneously -- essential for fair equity analysis.
+
+```{python}
+import statsmodels.formula.api as smf
+
+# OLS regression: salary predicted by division, title, and years of service
+model = smf.ols("salary ~ C(division) + C(title) + years_service", data=df).fit()
+
+print(model.summary().tables[1])
+```
+
+::: {.concept-box}
+#### Reading the Regression Output
+
+- **Intercept**: Expected salary for the reference group (alphabetically first: Assistant Professor in Business)
+- **C(division)[T.Engineering]**: How much more (or less) Engineering pays compared to Business, *holding title and seniority constant*
+- **C(title)[T.Full Professor]**: The Full Professor premium over Assistant Professor, *controlling for division and seniority*
+- **years_service**: Additional salary per year of service, *controlling for everything else*
+- **P>|t|**: p-value for each coefficient. Values below 0.05 are conventionally "significant"
+- **R-squared**: Proportion of salary variance explained by the model
+:::
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Nearly identical syntax with lm()
+model <- lm(salary ~ division + title + years_service, data = df)
+summary(model)
+confint(model)
+
+# Tidy output with broom
+library(broom)
+tidy(model, conf.int = TRUE)
+```
+:::
+
+### Interpreting Coefficients in Policy Context
+
+```{python}
+# Extract coefficients and confidence intervals
+results = pd.DataFrame({
+    "coefficient": model.params,
+    "std_err": model.bse,
+    "p_value": model.pvalues,
+    "ci_lower": model.conf_int()[0],
+    "ci_upper": model.conf_int()[1]
+}).round(2)
+
+# Filter to division effects
+div_effects = results[results.index.str.startswith("C(division)")].copy()
+div_effects.index = [idx.split("[T.")[1].rstrip("]") for idx in div_effects.index]
+
+print("Division Salary Premiums (controlling for title and seniority):")
+print("=" * 65)
+print(f"  {'Division':15s} {'Premium':>10s} {'95% CI':>22s} {'p-value':>10s}")
+print("-" * 65)
+for div, row in div_effects.iterrows():
+    sig = "*" if row["p_value"] < 0.05 else ""
+    print(f"  {div:15s} ${row['coefficient']:>9,.0f}  "
+          f"[${row['ci_lower']:>9,.0f}, ${row['ci_upper']:>9,.0f}]  "
+          f"{row['p_value']:>8.4f} {sig}")
+
+print(f"\n  Reference: Business division")
+print(f"  R-squared: {model.rsquared:.3f}")
+```
+
+### Model Diagnostics
+
+```{python}
+# Quick residual check
+residuals = model.resid
+
+fig = make_subplots(rows=1, cols=2,
+                    subplot_titles=("Residual Distribution", "Residuals vs Fitted"))
+
+fig.add_trace(
+    go.Histogram(x=residuals, nbinsx=40, marker_color=WONG[1], name="Residuals"),
+    row=1, col=1
+)
+
+fig.add_trace(
+    go.Scatter(x=model.fittedvalues, y=residuals, mode="markers",
+               marker=dict(color=WONG[4], opacity=0.3, size=4), name="Residuals"),
+    row=1, col=2
+)
+fig.add_hline(y=0, line_dash="dash", line_color="black", row=1, col=2)
+
+fig.update_layout(height=400, showlegend=False,
+                  title_text="Regression Diagnostics")
+fig.update_xaxes(title_text="Residual", row=1, col=1)
+fig.update_xaxes(title_text="Fitted Value", row=1, col=2)
+fig.update_yaxes(title_text="Count", row=1, col=1)
+fig.update_yaxes(title_text="Residual", row=1, col=2)
+fig.show()
+```
+
+## Multiple Comparisons Problem
+
+When you test many pairs, false positives accumulate. With 5 divisions there are 10 pairwise comparisons, so at alpha=0.05 you expect about 0.5 false positives by chance.
+
+::: {.concept-box}
+#### The Bonferroni Correction
+
+The simplest fix: divide your significance threshold by the number of tests.
+
+- **10 comparisons** at alpha=0.05: Bonferroni threshold = 0.05 / 10 = 0.005
+- Equivalently, multiply each p-value by 10 and compare to 0.05
+
+This is conservative (reduces power) but protects against false discoveries. For less conservative alternatives, consider the Benjamini-Hochberg procedure (controls false discovery rate rather than family-wise error rate).
+:::
+
+```{python}
+from itertools import combinations
+
+# All pairwise division comparisons
+div_names = sorted(df["division"].unique())
+pairs = list(combinations(div_names, 2))
+n_tests = len(pairs)
+bonferroni_alpha = 0.05 / n_tests
+
+print(f"Number of pairwise tests: {n_tests}")
+print(f"Bonferroni-corrected alpha: {bonferroni_alpha:.4f}")
+print()
+
+pairwise_results = []
+for div_a, div_b in pairs:
+    sal_a = df[df["division"] == div_a]["salary"]
+    sal_b = df[df["division"] == div_b]["salary"]
+    t_stat, p_val = stats.ttest_ind(sal_a, sal_b, equal_var=False)
+    p_adjusted = min(p_val * n_tests, 1.0)  # Bonferroni-adjusted p
+
+    pairwise_results.append({
+        "comparison": f"{div_a} vs {div_b}",
+        "diff": sal_b.mean() - sal_a.mean(),
+        "t_stat": t_stat,
+        "p_raw": p_val,
+        "p_bonferroni": p_adjusted,
+        "significant": p_adjusted < 0.05
+    })
+
+pw_df = pd.DataFrame(pairwise_results)
+
+print(f"{'Comparison':30s} {'Diff':>10s} {'p (raw)':>10s} {'p (adj)':>10s} {'Sig?':>6s}")
+print("-" * 70)
+for _, row in pw_df.iterrows():
+    print(f"  {row['comparison']:28s} ${row['diff']:>9,.0f} "
+          f"{row['p_raw']:>10.4f} {row['p_bonferroni']:>10.4f} "
+          f"{'YES' if row['significant'] else 'no':>5s}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# R has built-in p.adjust()
+p_values <- c(0.001, 0.03, 0.04, 0.15, 0.80)
+p.adjust(p_values, method = "bonferroni")
+p.adjust(p_values, method = "BH")  # Benjamini-Hochberg
+
+# Pairwise t-tests with correction
+pairwise.t.test(df$salary, df$division, p.adjust.method = "bonferroni")
+```
+:::
+
+## Effect Sizes: Practical vs Statistical Significance
+
+A p-value tells you *if* a difference exists. An effect size tells you *how big* it is. With large samples, even trivial differences become statistically significant.
+
+::: {.concept-box}
+#### Cohen's d
+
+Cohen's d measures the difference in means in standard deviation units.
+
+$$d = \frac{\bar{x}_1 - \bar{x}_2}{s_{\text{pooled}}}$$
+
+| d value | Interpretation |
+|---------|---------------|
+| 0.2 | Small effect |
+| 0.5 | Medium effect |
+| 0.8 | Large effect |
+
+A \$2,000 salary difference might be statistically significant (p < 0.001) with 1,000 employees but have d = 0.15 (trivial). Always report both.
+:::
+
+```{python}
+def cohens_d(group1, group2):
+    """Calculate Cohen's d for two independent groups.
+
+    Uses pooled standard deviation.
+    """
+    n1, n2 = len(group1), len(group2)
+    var1, var2 = group1.var(), group2.var()
+    pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+
+    if pooled_std == 0:
+        return 0.0
+    return (group1.mean() - group2.mean()) / pooled_std
+
+
+# Calculate effect sizes for all pairwise division comparisons
+print(f"{'Comparison':30s} {'Diff':>10s} {'Cohen d':>10s} {'Size':>10s}")
+print("-" * 65)
+
+for div_a, div_b in pairs:
+    sal_a = df[df["division"] == div_a]["salary"]
+    sal_b = df[df["division"] == div_b]["salary"]
+    d = cohens_d(sal_a, sal_b)
+    diff = sal_a.mean() - sal_b.mean()
+
+    size = "Large" if abs(d) >= 0.8 else "Medium" if abs(d) >= 0.5 else \
+           "Small" if abs(d) >= 0.2 else "Trivial"
+
+    print(f"  {div_a} vs {div_b:15s} ${diff:>9,.0f} {d:>10.3f} {size:>10s}")
+```
+
+```{python}
+# Combine p-values and effect sizes in one summary
+for _, row in pw_df.iterrows():
+    div_a, div_b = row["comparison"].split(" vs ")
+    d = cohens_d(
+        df[df["division"] == div_a]["salary"],
+        df[df["division"] == div_b]["salary"]
+    )
+    row["cohens_d"] = abs(d)
+
+    if row["significant"] and abs(d) >= 0.5:
+        print(f"  {row['comparison']:28s} -- Significant AND meaningful (d={abs(d):.2f})")
+    elif row["significant"] and abs(d) < 0.2:
+        print(f"  {row['comparison']:28s} -- Significant but TRIVIAL effect (d={abs(d):.2f})")
+    elif row["significant"]:
+        print(f"  {row['comparison']:28s} -- Significant, small-medium effect (d={abs(d):.2f})")
+    else:
+        print(f"  {row['comparison']:28s} -- Not significant (d={abs(d):.2f})")
+```
+
+## Visualizing Results
+
+### Coefficient Plot
+
+Coefficient plots display regression estimates with confidence intervals, making it easy to see which effects are significant and how large they are.
+
+```{python}
+# Prepare coefficients for plotting (exclude intercept)
+coef_df = results.drop("Intercept").copy()
+coef_df["term"] = coef_df.index
+coef_df["term"] = coef_df["term"].str.replace("C(division)[T.", "", regex=False)
+coef_df["term"] = coef_df["term"].str.replace("C(title)[T.", "", regex=False)
+coef_df["term"] = coef_df["term"].str.rstrip("]")
+coef_df["significant"] = coef_df["p_value"] < 0.05
+
+fig = go.Figure()
+
+for i, (_, row) in enumerate(coef_df.iterrows()):
+    color = WONG[2] if row["significant"] else WONG[5]
+
+    # Confidence interval line
+    fig.add_trace(go.Scatter(
+        x=[row["ci_lower"], row["ci_upper"]],
+        y=[row["term"], row["term"]],
+        mode="lines",
+        line=dict(color=color, width=3),
+        showlegend=False
+    ))
+
+    # Point estimate
+    fig.add_trace(go.Scatter(
+        x=[row["coefficient"]],
+        y=[row["term"]],
+        mode="markers",
+        marker=dict(color=color, size=10),
+        showlegend=False,
+        hovertext=f"${row['coefficient']:,.0f} [{row['ci_lower']:,.0f}, {row['ci_upper']:,.0f}]"
+    ))
+
+fig.add_vline(x=0, line_dash="dash", line_color="gray")
+
+fig.update_layout(
+    title="Regression Coefficients with 95% Confidence Intervals",
+    xaxis_title="Coefficient (Salary $)",
+    yaxis_title="",
+    height=400,
+    annotations=[
+        dict(x=0.98, y=0.02, xref="paper", yref="paper",
+             text="Green = significant, Orange = not significant",
+             showarrow=False, font=dict(size=10))
+    ]
+)
+
+fig.show()
+```
+
+### Forest Plot for Pairwise Comparisons
+
+```{python}
+# Build forest plot data with confidence intervals
+forest_data = []
+for div_a, div_b in pairs:
+    sal_a = df[df["division"] == div_a]["salary"]
+    sal_b = df[df["division"] == div_b]["salary"]
+
+    diff = sal_a.mean() - sal_b.mean()
+    se = np.sqrt(sal_a.var() / len(sal_a) + sal_b.var() / len(sal_b))
+    ci_lower = diff - 1.96 * se
+    ci_upper = diff + 1.96 * se
+    d = cohens_d(sal_a, sal_b)
+
+    forest_data.append({
+        "comparison": f"{div_a} vs {div_b}",
+        "diff": diff,
+        "ci_lower": ci_lower,
+        "ci_upper": ci_upper,
+        "cohens_d": abs(d)
+    })
+
+forest_df = pd.DataFrame(forest_data).sort_values("diff")
+
+fig = go.Figure()
+
+for _, row in forest_df.iterrows():
+    crosses_zero = row["ci_lower"] <= 0 <= row["ci_upper"]
+    color = WONG[5] if crosses_zero else WONG[4]
+
+    fig.add_trace(go.Scatter(
+        x=[row["ci_lower"], row["ci_upper"]],
+        y=[row["comparison"], row["comparison"]],
+        mode="lines", line=dict(color=color, width=3),
+        showlegend=False
+    ))
+    fig.add_trace(go.Scatter(
+        x=[row["diff"]], y=[row["comparison"]],
+        mode="markers",
+        marker=dict(color=color, size=8, symbol="diamond"),
+        showlegend=False,
+        hovertext=f"Diff: ${row['diff']:,.0f}, d={row['cohens_d']:.2f}"
+    ))
+
+fig.add_vline(x=0, line_dash="dash", line_color="black")
+
+fig.update_layout(
+    title="Pairwise Salary Differences (Forest Plot)",
+    xaxis_title="Salary Difference ($)",
+    height=450,
+    annotations=[
+        dict(x=0.98, y=0.02, xref="paper", yref="paper",
+             text="Blue = significant, Orange = CI includes zero",
+             showarrow=False, font=dict(size=10))
+    ]
+)
+
+fig.show()
+```
+
+### Effect Size Visualization
+
+```{python}
+# Bar chart of Cohen's d values with threshold lines
+effect_df = pd.DataFrame([{
+    "comparison": f"{a} vs {b}",
+    "d": abs(cohens_d(df[df["division"] == a]["salary"],
+                      df[df["division"] == b]["salary"]))
+} for a, b in pairs]).sort_values("d", ascending=True)
+
+fig = px.bar(
+    effect_df, x="d", y="comparison", orientation="h",
+    title="Effect Sizes (Cohen's d) for Pairwise Division Comparisons",
+    labels={"d": "Cohen's d (absolute)", "comparison": ""},
+    color_discrete_sequence=[WONG[1]]
+)
+
+fig.add_vline(x=0.2, line_dash="dot", line_color="gray",
+              annotation_text="Small (0.2)", annotation_position="top")
+fig.add_vline(x=0.5, line_dash="dot", line_color="gray",
+              annotation_text="Medium (0.5)", annotation_position="top")
+fig.add_vline(x=0.8, line_dash="dot", line_color="gray",
+              annotation_text="Large (0.8)", annotation_position="top")
+
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 21: Equity Audit
+
+Using the `df` dataset generated at the top of this lesson:
+
+1. Run a t-test comparing Full Professor salaries in Engineering vs Education. Report the t-statistic, p-value, and Cohen's d.
+2. Fit an OLS model predicting salary from title, division, and years of service. Which division has the largest premium? Is it significant?
+3. Perform all pairwise t-tests between the three title levels. Apply Bonferroni correction and report which comparisons remain significant.
+4. Create a coefficient plot for your regression model (excluding the intercept).
+5. Write a one-paragraph policy summary: based on your regression, which factors most influence salary, and are there equity concerns?
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. T-test: Full Professors in Engineering vs Education
+eng_fp = df[(df["division"] == "Engineering") & (df["title"] == "Full Professor")]["salary"]
+edu_fp = df[(df["division"] == "Education") & (df["title"] == "Full Professor")]["salary"]
+
+t_stat, p_val = stats.ttest_ind(eng_fp, edu_fp, equal_var=False)
+d = cohens_d(eng_fp, edu_fp)
+
+print("1. Full Professor: Engineering vs Education")
+print(f"   Engineering mean: ${eng_fp.mean():,.0f} (n={len(eng_fp)})")
+print(f"   Education mean:   ${edu_fp.mean():,.0f} (n={len(edu_fp)})")
+print(f"   t = {t_stat:.3f}, p = {p_val:.6f}, Cohen's d = {d:.3f}")
+
+size = "large" if abs(d) >= 0.8 else "medium" if abs(d) >= 0.5 else \
+       "small" if abs(d) >= 0.2 else "trivial"
+print(f"   Effect size: {size}")
+
+# 2. OLS regression
+model = smf.ols("salary ~ C(title) + C(division) + years_service", data=df).fit()
+
+coefs = pd.DataFrame({
+    "coef": model.params,
+    "p": model.pvalues,
+    "ci_lo": model.conf_int()[0],
+    "ci_hi": model.conf_int()[1]
+})
+
+div_coefs = coefs[coefs.index.str.startswith("C(division)")].copy()
+div_coefs.index = [x.split("[T.")[1].rstrip("]") for x in div_coefs.index]
+
+print("\n2. Division effects (reference = Business):")
+for div, row in div_coefs.sort_values("coef", ascending=False).iterrows():
+    sig = "*" if row["p"] < 0.05 else ""
+    print(f"   {div:15s}: ${row['coef']:>9,.0f}  p={row['p']:.4f} {sig}")
+
+largest = div_coefs["coef"].abs().idxmax()
+print(f"\n   Largest premium: {largest} (${div_coefs.loc[largest, 'coef']:,.0f})")
+print(f"   R-squared: {model.rsquared:.3f}")
+
+# 3. Pairwise title comparisons with Bonferroni
+title_levels = sorted(df["title"].unique())
+title_pairs = list(combinations(title_levels, 2))
+n_title_tests = len(title_pairs)
+
+print(f"\n3. Pairwise title comparisons (Bonferroni alpha = {0.05/n_title_tests:.4f}):")
+for t_a, t_b in title_pairs:
+    sal_a = df[df["title"] == t_a]["salary"]
+    sal_b = df[df["title"] == t_b]["salary"]
+    t_s, p_v = stats.ttest_ind(sal_a, sal_b, equal_var=False)
+    p_adj = min(p_v * n_title_tests, 1.0)
+    d_val = cohens_d(sal_a, sal_b)
+
+    sig_flag = "SIGNIFICANT" if p_adj < 0.05 else "not significant"
+    print(f"   {t_a} vs {t_b}")
+    print(f"     p(raw)={p_v:.2e}, p(adj)={p_adj:.2e}, d={d_val:.2f} -- {sig_flag}")
+
+# 4. Coefficient plot
+plot_df = coefs.drop("Intercept").copy()
+plot_df["term"] = plot_df.index
+plot_df["term"] = plot_df["term"].str.replace("C(division)[T.", "", regex=False)
+plot_df["term"] = plot_df["term"].str.replace("C(title)[T.", "", regex=False)
+plot_df["term"] = plot_df["term"].str.rstrip("]")
+plot_df["sig"] = plot_df["p"] < 0.05
+
+fig = go.Figure()
+for _, row in plot_df.iterrows():
+    color = WONG[2] if row["sig"] else WONG[5]
+    fig.add_trace(go.Scatter(
+        x=[row["ci_lo"], row["ci_hi"]], y=[row["term"], row["term"]],
+        mode="lines", line=dict(color=color, width=3), showlegend=False
+    ))
+    fig.add_trace(go.Scatter(
+        x=[row["coef"]], y=[row["term"]],
+        mode="markers", marker=dict(color=color, size=10), showlegend=False
+    ))
+
+fig.add_vline(x=0, line_dash="dash", line_color="gray")
+fig.update_layout(title="Coefficient Plot (Exercise)", xaxis_title="Salary ($)",
+                  height=400)
+fig.show()
+
+# 5. Policy summary
+print("\n5. Policy Summary:")
+print("   After controlling for title and years of service, division")
+print("   assignment remains a significant predictor of salary. Medicine")
+print("   and Engineering command the largest premiums over Education and")
+print("   L&S. Title is the strongest predictor, with Full Professors")
+print("   earning substantially more than Assistant Professors (large")
+print("   effect size). Years of service has a modest but significant")
+print("   positive effect. These patterns suggest that salary differences")
+print("   across divisions are structural rather than explained by")
+print("   seniority or rank alone, warranting further review for equity.")
+```
+:::
+:::
+
+## Summary
+
+You've learned to rigorously test salary equity claims:
+
+- **t-Tests**: Compare means between two groups (independent or paired)
+- **ANOVA**: Test whether any group differs before diving into pairwise comparisons
+- **OLS Regression**: Control for multiple confounders simultaneously
+- **Bonferroni Correction**: Guard against false positives when making many comparisons
+- **Cohen's d**: Measure practical significance alongside statistical significance
+- **Visualization**: Coefficient plots and forest plots communicate results clearly
+
+Key principles:
+
+- Always control for confounders (title, seniority) before claiming a division effect
+- Report effect sizes alongside p-values -- statistical significance is not the same as practical importance
+- Correct for multiple comparisons when testing many groups
+- Visualize confidence intervals, not just point estimates
+
+## Next Steps
+
+Continue to [Lesson 22: Forecasting](22-forecasting.qmd) to learn time-series methods for projecting salary costs and workforce trends.

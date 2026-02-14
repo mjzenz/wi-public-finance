@@ -1,0 +1,449 @@
+---
+title: "Capstone: Complete Analysis Report"
+subtitle: "Lesson 18"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Combine all skills into a polished, publishable analysis
+- Write clear narrative alongside embedded code
+- Structure an analysis report for a non-technical audience
+- Publish your work to GitHub Pages
+- Present findings with actionable recommendations
+:::
+
+## Introduction
+
+This capstone project brings together everything you've learned throughout the tutorial. You'll create a complete salary equity analysis report that could be shared with stakeholders, demonstrating mastery of:
+
+- Data loading and cleaning (Lessons 3-5)
+- Joining and reshaping data (Lessons 5-6)
+- Time series and date handling (Lesson 7)
+- String operations (Lesson 8)
+- Inflation adjustment (Lesson 9)
+- Compensation analysis (Lesson 10)
+- Workforce analytics (Lesson 11)
+- Employee tracking (Lesson 12)
+- Visualization with Plotly (Lessons 13-14)
+- API integration (Lesson 15)
+- Web scraping (Lesson 16)
+- Production code patterns (Lesson 17)
+
+::: {.concept-box}
+#### Framing Analysis for Decision-Makers
+
+The difference between a good analysis and an influential one is **framing**. University leaders don't have time to interpret raw statistics — they need findings connected to decisions they can make.
+
+**Executive summary format that works:**
+
+1. **Lead with the problem**: "Faculty salary competitiveness has declined 12% relative to peers since 2018, contributing to a 15% increase in voluntary departures among mid-career faculty."
+2. **Quantify the stakes**: "At current attrition rates, replacement costs (search, startup packages, lost productivity) exceed $2.5M annually — more than the cost of targeted retention raises."
+3. **Present options, not just findings**: "Three scenarios: (A) 2% across-the-board + 1% merit pool ($4.2M), (B) targeted market adjustments for highest-risk positions ($2.8M), (C) status quo with projected 18% attrition."
+4. **Recommend and justify**: "We recommend Option B based on cost-effectiveness and retention modeling."
+
+**Connecting to institutional strategy**: Every university has a strategic plan with goals around research excellence, student success, diversity, and financial sustainability. Frame your findings in those terms: "Salary compression in STEM departments undermines our strategic goal of research competitiveness" is more actionable than "STEM compression ratios average 0.87."
+:::
+
+## The Assignment
+
+Create a Quarto document analyzing **salary trends at UW-Madison**. Your report should address these key questions:
+
+### Research Questions
+
+1. **How have salaries changed in real terms since 2021?**
+   - Compare nominal vs inflation-adjusted trends
+   - Identify which employee categories gained or lost purchasing power
+
+2. **How do salaries vary across divisions?**
+   - Compare median salaries and salary ranges
+   - Identify the highest and lowest paying divisions
+
+3. **What do the salary distributions look like?**
+   - Analyze by employee category (Faculty, Academic Staff, University Staff)
+   - Identify outliers and explain possible reasons
+
+4. **What workforce changes have occurred?**
+   - Track headcount and FTE trends
+   - Identify divisions that grew or shrank significantly
+
+5. **Are there equity concerns in compensation?**
+   - Examine salary differences by employee category within similar job groups
+   - Look for evidence of salary compression among long-tenured employees
+   - Consider whether any observed disparities align with protected class patterns (gender, race) if demographic data is available
+   - Frame findings in terms of institutional risk and compliance obligations
+
+## Report Structure
+
+Your report should include the following sections:
+
+### Executive Summary
+- 3-4 bullet points summarizing key findings
+- High-level recommendations or implications
+
+### Data and Methods
+- Data sources and time period covered
+- Key methodological choices (inflation adjustment, outlier handling)
+- Limitations of the analysis
+
+### Findings
+
+#### Section 1: University-Wide Trends
+- Nominal vs real salary trends over time
+- Overall FTE and headcount changes
+- Visualization: Line chart with dual axis or subplots
+
+#### Section 2: Divisional Analysis
+- Comparison of salaries across major divisions
+- Box plots or bar charts showing distributions
+- Identification of high and low outliers
+
+#### Section 3: Employee Category Analysis
+- Salary trends by category (Faculty, Academic Staff, University Staff)
+- Composition changes over time
+- Peer comparison within categories
+
+#### Section 4: Individual Trajectories (Optional)
+- Sample of anonymized employee salary paths
+- Transfer patterns between divisions
+
+### Limitations and Future Work
+- Data quality issues encountered
+- Questions not answered
+- Suggestions for additional analysis
+
+### Technical Appendix
+- Key code snippets for reproducibility
+- Data dictionary
+
+## Report Template
+
+Create a file `capstone/salary-equity-report.qmd` with this structure:
+
+````markdown
+---
+title: "UW-Madison Salary Analysis Report"
+author: "Your Name"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## Executive Summary
+
+*Write 3-4 bullet points summarizing your key findings*
+
+- Finding 1
+- Finding 2
+- Finding 3
+
+## Data and Methods
+
+```{{python}}
+#| include: false
+# Setup - load libraries and data
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Load your data
+# df = pd.read_csv("data/salaries.csv")
+```
+
+*Describe your data sources, time period, and methods*
+
+## Findings
+
+### University-Wide Trends
+
+```{{python}}
+# Your trend analysis code here
+# Include clear visualizations
+```
+
+*Interpret the visualization - what does it tell us?*
+
+### Divisional Analysis
+
+```{{python}}
+# Divisional comparison code
+```
+
+*Key insights from divisional analysis*
+
+### Employee Category Analysis
+
+```{{python}}
+# Category analysis code
+```
+
+*What patterns emerge across employee categories?*
+
+## Limitations
+
+*What couldn't you analyze? What are the data quality issues?*
+
+## Technical Appendix
+
+::: {.callout-note collapse="true"}
+## Data Dictionary
+
+| Column | Description |
+|--------|-------------|
+| ... | ... |
+:::
+
+::: {.callout-note collapse="true"}
+## Key Functions Used
+
+```{{python}}
+#| eval: false
+# Show key function definitions
+```
+:::
+````
+
+## Guidelines
+
+### Writing for Your Audience
+
+- **Write for a reader who understands finance but not Python**
+  - Explain what the analysis does, not how the code works
+  - Use visualizations to support every major claim
+  - Define technical terms when first used
+
+- **Keep narrative focused**
+  - Lead with the insight, then show the evidence
+  - "Salaries grew 3% in nominal terms but fell 2% in real terms" is better than "The mean salary in 2024 was $X and in 2021 was $Y"
+
+### Code Presentation
+
+- **Use code folding** (`code-fold: true`) to hide code by default
+- **Include code in collapsible sections** for reproducibility
+- **Add comments** that explain why, not what
+- **Use consistent styling** throughout
+
+### Visualizations
+
+- **Every chart needs a title and proper labels**
+- **Use colorblind-friendly palettes** (Wong palette from Lesson 13)
+- **Include hover information** for interactivity
+- **Don't overload charts** - one message per chart
+
+### Length and Scope
+
+- **Total length**: 2,000-3,000 words plus code/figures
+- **Visualizations**: 5-8 charts minimum
+- **Focus depth over breadth**: Better to deeply analyze 3 questions than superficially cover 10
+
+## Sample Code Patterns
+
+### Loading and Preparing Data
+
+```{python}
+#| eval: false
+import pandas as pd
+import numpy as np
+
+# Load salary data
+df = pd.read_csv("data/salaries.csv")
+df.columns = df.columns.str.lower().str.replace(" ", "_")
+df["date"] = pd.to_datetime(df["date"])
+
+# Load CPI data for inflation adjustment
+cpi = pd.read_csv("data/cpi_data.csv")
+base_cpi = cpi[cpi["date"] == "2021-11-01"]["cpi"].values[0]
+cpi["cpi_index"] = base_cpi / cpi["cpi"]
+
+# Merge and calculate real salary
+df = df.merge(cpi[["date", "cpi_index"]], on="date")
+df["real_salary"] = (df["salary"] * df["cpi_index"]).round(0)
+```
+
+### Creating Summary Statistics
+
+```{python}
+#| eval: false
+# Salary summary by division
+summary = df.groupby("division").agg(
+    count=("employee_id", "count"),
+    median_salary=("salary", "median"),
+    median_real=("real_salary", "median"),
+    min_salary=("salary", "min"),
+    max_salary=("salary", "max")
+).round(0)
+
+# Calculate salary range
+summary["salary_range"] = summary["max_salary"] - summary["min_salary"]
+
+summary.sort_values("median_salary", ascending=False)
+```
+
+### Creating Effective Visualizations
+
+```{python}
+#| eval: false
+# Colorblind-friendly palette
+wong_palette = ["#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                "#0072B2", "#D55E00", "#CC79A7"]
+
+# Trend comparison chart
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=("Nominal Salary", "Real Salary (2021$)")
+)
+
+for i, col in enumerate(["median_salary", "median_real"]):
+    for j, div in enumerate(divisions):
+        div_data = trend_data[trend_data["division"] == div]
+        fig.add_trace(
+            go.Scatter(
+                x=div_data["date"],
+                y=div_data[col],
+                name=div,
+                line_color=wong_palette[j],
+                showlegend=(i == 0)
+            ),
+            row=1, col=i+1
+        )
+
+fig.update_layout(
+    title="Nominal vs Real Salary Trends by Division",
+    height=400,
+    hovermode="x unified"
+)
+fig.update_yaxes(tickformat="$,.0f")
+fig.show()
+```
+
+## Publishing
+
+When your report is complete, publish to GitHub Pages:
+
+### Step 1: Ensure Git Repository is Set Up
+
+```bash
+git init  # If not already a repo
+git add .
+git commit -m "Capstone report complete"
+```
+
+### Step 2: Push to GitHub
+
+```bash
+gh repo create uw-salary-analysis --public --source=. --push
+```
+
+### Step 3: Publish with Quarto
+
+```bash
+quarto publish gh-pages
+```
+
+### Step 4: Share Your URL
+
+Your report will be available at:
+`https://yourusername.github.io/uw-salary-analysis/`
+
+## Rubric
+
+Your capstone will be evaluated on:
+
+| Criterion | Weight | Description |
+|-----------|--------|-------------|
+| Data Processing | 25% | Correct loading, cleaning, merging, and transformation |
+| Inflation Adjustment | 15% | Proper CPI calculation and interpretation |
+| Visualizations | 20% | Clear, informative, properly labeled charts |
+| Narrative Quality | 20% | Clear writing that explains findings to non-technical readers |
+| Code Organization | 10% | Clean, documented, reproducible code |
+| Publication | 10% | Successfully deployed to GitHub Pages |
+
+### Excellence Criteria
+
+To achieve excellence, your report should:
+
+- **Tell a cohesive story** - not just show disconnected analyses
+- **Lead with insights** - every section starts with the key finding
+- **Handle edge cases** - acknowledge and address data issues
+- **Be reproducible** - someone else could run your code
+- **Look professional** - consistent formatting, no broken charts
+
+## Getting Started
+
+::: {.exercise-box}
+#### Capstone Exercise
+
+1. Create a new directory `capstone/` in your project
+2. Create `capstone/salary-equity-report.qmd` with the template above
+3. Set up the YAML header with appropriate metadata
+4. Write your Executive Summary first (helps focus your analysis)
+5. Build out each section, writing narrative before code
+6. Review and refine visualizations
+7. Run `quarto preview` to check your work
+8. Publish with `quarto publish gh-pages`
+9. Share your URL!
+
+**No solution is provided for the capstone - this is your chance to demonstrate mastery!**
+:::
+
+## Tips for Success
+
+### Planning
+
+1. **Start with questions** - What do you want to know?
+2. **Sketch visualizations** - What charts would answer each question?
+3. **Identify data needs** - What columns/transformations do you need?
+4. **Write the narrative first** - Then fill in with code
+
+### Execution
+
+1. **Work incrementally** - Get one section working before moving to the next
+2. **Use `quarto preview`** - See your changes in real-time
+3. **Test code separately** - Use a scratch notebook for experimentation
+4. **Save often** - Commit to git frequently
+
+### Review
+
+1. **Read aloud** - Does the narrative flow?
+2. **Check visualizations** - Are they clear without reading code?
+3. **Verify numbers** - Do the statistics make sense?
+4. **Get feedback** - Have someone else read your report
+
+## Conclusion
+
+Congratulations on completing **Python for Financial Analysis**!
+
+Throughout this tutorial, you've learned to:
+
+- **Translate R/tidyverse skills to Python/pandas** - You can now work comfortably in both ecosystems
+- **Work with real-world messy data** - You've handled missing values, inconsistent formats, and data quality issues
+- **Apply financial analysis concepts** - Inflation adjustment, peer comparison, compensation equity
+- **Build interactive visualizations** - Plotly charts that engage readers
+- **Acquire data programmatically** - APIs and web scraping for automated data collection
+- **Structure production-ready code** - Functions, modules, logging, and testing
+
+### Continue Your Learning
+
+Now that you've completed this tutorial, consider:
+
+- **Extending this analysis** with new questions or data sources
+- **Applying these skills** to other public datasets (Census, BLS, SEC)
+- **Building more complex applications** with Streamlit or Dash
+- **Contributing to open source** data analysis projects
+- **Teaching others** what you've learned
+
+The skills you've developed are valuable and in-demand. Use them to create insights, inform decisions, and tell compelling stories with data.
+
+**Good luck with your capstone project!**

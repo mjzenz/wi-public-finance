@@ -1,0 +1,471 @@
+---
+title: "Reshaping and Aggregation"
+subtitle: "Lesson 5"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Use `groupby()` to aggregate data by categories
+- Apply multiple aggregation functions simultaneously
+- Reshape data with `pivot_table()` (wide format)
+- Reshape data with `melt()` (long format)
+- Combine grouping with aggregation for summary statistics
+:::
+
+## Introduction
+
+Aggregating and reshaping data is central to analysis. You need to summarize data by groups, calculate statistics, and transform between wide and long formats. In pandas, `groupby()`, `pivot_table()`, and `melt()` are your primary tools.
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Create sample multi-period salary data
+np.random.seed(42)
+
+salary_data = {
+    "employee_id": ["E001", "E002", "E003", "E004", "E005"] * 3,
+    "date": ["2023-01", "2023-01", "2023-01", "2023-01", "2023-01",
+             "2023-06", "2023-06", "2023-06", "2023-06", "2023-06",
+             "2024-01", "2024-01", "2024-01", "2024-01", "2024-01"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"] * 3,
+    "division": [
+        "Letters & Science", "Medicine", "Letters & Science", "Engineering", "Business",
+        "Letters & Science", "Medicine", "Letters & Science", "Engineering", "Business",
+        "Letters & Science", "Medicine", "Letters & Science", "Engineering", "Business"
+    ],
+    "employee_category": [
+        "Faculty", "Faculty", "Academic Staff", "Faculty", "Academic Staff",
+        "Faculty", "Faculty", "Academic Staff", "Faculty", "Academic Staff",
+        "Faculty", "Faculty", "Academic Staff", "Faculty", "Academic Staff"
+    ],
+    "salary": [85000, 125000, 62000, 95000, 58000,
+               87000, 128000, 64000, 98000, 60000,
+               90000, 132000, 66000, 102000, 63000],
+    "fte": [1.0, 1.0, 0.8, 1.0, 0.5,
+            1.0, 1.0, 0.8, 1.0, 0.5,
+            1.0, 1.0, 0.9, 1.0, 0.6]
+}
+
+df = pd.DataFrame(salary_data)
+df
+```
+
+## Grouping with `groupby()`
+
+`groupby()` splits data into groups, applies a function to each group, and combines results:
+
+```{python}
+# Group by division and calculate mean salary
+df.groupby("division")["salary"].mean()
+```
+
+This returns a Series. To get a DataFrame, use double brackets or reset the index:
+
+```{python}
+# Reset index to get DataFrame
+df.groupby("division")["salary"].mean().reset_index()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+df %>%
+  group_by(division) %>%
+  summarize(salary = mean(salary))
+```
+:::
+
+### Grouping by Multiple Columns
+
+```{python}
+# Group by division and date
+df.groupby(["division", "date"])["salary"].mean().reset_index()
+```
+
+### Aggregating Multiple Columns
+
+```{python}
+# Aggregate multiple columns
+df.groupby("division")[["salary", "fte"]].mean()
+```
+
+## Multiple Aggregation Functions with `agg()`
+
+Use `agg()` to apply multiple functions at once:
+
+```{python}
+# Multiple aggregations
+df.groupby("division")["salary"].agg(["mean", "median", "min", "max", "count"])
+```
+
+### Named Aggregations
+
+For cleaner output with custom column names:
+
+```{python}
+# Named aggregations (pandas 0.25+)
+summary = df.groupby("division").agg(
+    avg_salary=("salary", "mean"),
+    median_salary=("salary", "median"),
+    total_fte=("fte", "sum"),
+    headcount=("employee_id", "count")
+).reset_index()
+summary
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+df %>%
+  group_by(division) %>%
+  summarize(
+    avg_salary = mean(salary),
+    median_salary = median(salary),
+    total_fte = sum(fte),
+    headcount = n()
+  )
+```
+:::
+
+### Custom Aggregation Functions
+
+You can use custom functions or lambdas:
+
+```{python}
+# Range (max - min)
+df.groupby("division")["salary"].agg(lambda x: x.max() - x.min())
+```
+
+```{python}
+# Multiple custom aggregations
+def salary_range(x):
+    return x.max() - x.min()
+
+def coefficient_of_variation(x):
+    return x.std() / x.mean() * 100
+
+df.groupby("division")["salary"].agg([
+    ("range", salary_range),
+    ("cv_percent", coefficient_of_variation)
+])
+```
+
+## Pivot Tables
+
+Pivot tables reshape data from long to wide format, similar to Excel pivot tables:
+
+```{python}
+# Create pivot table: rows=division, columns=date, values=salary mean
+pivot = df.pivot_table(
+    values="salary",
+    index="division",
+    columns="date",
+    aggfunc="mean"
+)
+pivot
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# tidyr approach
+df %>%
+  group_by(division, date) %>%
+  summarize(salary = mean(salary)) %>%
+  pivot_wider(names_from = date, values_from = salary)
+```
+:::
+
+### Multiple Aggregation Functions in Pivot
+
+```{python}
+# Multiple aggregations
+pivot_multi = df.pivot_table(
+    values="salary",
+    index="division",
+    columns="date",
+    aggfunc=["mean", "count"]
+)
+pivot_multi
+```
+
+### Multiple Values
+
+```{python}
+# Multiple value columns
+pivot_values = df.pivot_table(
+    values=["salary", "fte"],
+    index="division",
+    columns="date",
+    aggfunc="mean"
+)
+pivot_values
+```
+
+### Adding Margins (Totals)
+
+```{python}
+# Add row and column totals
+pivot_totals = df.pivot_table(
+    values="salary",
+    index="division",
+    columns="date",
+    aggfunc="mean",
+    margins=True,
+    margins_name="Overall"
+)
+pivot_totals
+```
+
+## Melting Data (Wide to Long)
+
+`melt()` converts wide data to long format (the opposite of pivot):
+
+```{python}
+# Start with our pivot table
+wide_data = pivot.reset_index()
+wide_data
+```
+
+```{python}
+# Melt to long format
+long_data = wide_data.melt(
+    id_vars=["division"],
+    var_name="date",
+    value_name="avg_salary"
+)
+long_data
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# tidyr approach
+wide_data %>%
+  pivot_longer(
+    cols = -division,
+    names_to = "date",
+    values_to = "avg_salary"
+  )
+```
+:::
+
+### Practical Example: FTE Over Time
+
+```{python}
+# Create FTE pivot by division and date
+fte_pivot = df.pivot_table(
+    values="fte",
+    index="division",
+    columns="date",
+    aggfunc="sum"
+)
+fte_pivot
+```
+
+```{python}
+# Calculate change from first to last period
+fte_pivot["change"] = fte_pivot["2024-01"] - fte_pivot["2023-01"]
+fte_pivot["pct_change"] = (fte_pivot["change"] / fte_pivot["2023-01"] * 100).round(1)
+fte_pivot
+```
+
+## Crosstab: Quick Frequency Tables
+
+`pd.crosstab()` creates frequency tables:
+
+```{python}
+# Count of employees by division and category
+pd.crosstab(df["division"], df["employee_category"])
+```
+
+```{python}
+# With row percentages
+pd.crosstab(
+    df["division"],
+    df["employee_category"],
+    normalize="index"
+).round(2) * 100
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Base R
+table(df$division, df$employee_category)
+
+# Proportions
+prop.table(table(df$division, df$employee_category), margin = 1)
+```
+:::
+
+## Transforming Groups
+
+Sometimes you want to add aggregated values back to the original DataFrame:
+
+### Using `transform()`
+
+```{python}
+# Add division mean salary to each row
+df["division_avg_salary"] = df.groupby("division")["salary"].transform("mean")
+df[["last_name", "division", "salary", "division_avg_salary"]].drop_duplicates("last_name")
+```
+
+```{python}
+# Calculate difference from group mean
+df["diff_from_avg"] = df["salary"] - df["division_avg_salary"]
+df[["last_name", "division", "salary", "division_avg_salary", "diff_from_avg"]].drop_duplicates("last_name")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr mutate with group
+df %>%
+  group_by(division) %>%
+  mutate(
+    division_avg_salary = mean(salary),
+    diff_from_avg = salary - division_avg_salary
+  )
+```
+:::
+
+### Calculating Percentiles Within Groups
+
+```{python}
+# Add salary percentile within division
+df["salary_pctile"] = df.groupby("division")["salary"].transform(
+    lambda x: x.rank(pct=True)
+)
+df[["last_name", "division", "salary", "salary_pctile"]].drop_duplicates("last_name")
+```
+
+## Combining Operations
+
+A complete analysis often chains multiple operations:
+
+```{python}
+# Complete analysis pipeline
+analysis = (
+    df
+    .groupby(["division", "date"])
+    .agg(
+        total_salary=("salary", "sum"),
+        total_fte=("fte", "sum"),
+        headcount=("employee_id", "count")
+    )
+    .reset_index()
+)
+
+# Add calculated column
+analysis["salary_per_fte"] = analysis["total_salary"] / analysis["total_fte"]
+analysis
+```
+
+```{python}
+# Pivot for time comparison
+time_comparison = analysis.pivot_table(
+    values="salary_per_fte",
+    index="division",
+    columns="date"
+)
+time_comparison
+```
+
+## Quick Reference
+
+| Task | pandas | dplyr/tidyr |
+|------|--------|-------------|
+| Group and summarize | `df.groupby("col").agg(...)` | `group_by() %>% summarize()` |
+| Multiple agg functions | `agg(["mean", "sum"])` | `summarize(m=mean(), s=sum())` |
+| Named aggregations | `agg(name=("col", "func"))` | `summarize(name = func(col))` |
+| Pivot to wide | `pivot_table()` | `pivot_wider()` |
+| Melt to long | `melt()` | `pivot_longer()` |
+| Frequency table | `pd.crosstab()` | `table()` or `count()` |
+| Add group stat | `transform()` | `mutate()` with grouped df |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 5: Salary Aggregations
+
+Using the sample salary data:
+
+1. Calculate the mean, median, and max salary for each employee category
+2. Create a pivot table showing total FTE by division (rows) and date (columns)
+3. Calculate the total salary expenditure by division for each date
+4. For each employee, calculate their salary as a percentage of their division's total
+5. Create a crosstab showing the count of employees by division and category
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Salary statistics by employee category
+print("1. Salary statistics by category:")
+category_stats = df.groupby("employee_category")["salary"].agg(
+    ["mean", "median", "max"]
+).round(0)
+print(category_stats)
+
+# 2. FTE pivot table
+print("\n2. FTE by division and date:")
+fte_pivot = df.pivot_table(
+    values="fte",
+    index="division",
+    columns="date",
+    aggfunc="sum"
+)
+print(fte_pivot)
+
+# 3. Total salary by division and date
+print("\n3. Total salary expenditure:")
+salary_total = df.groupby(["division", "date"])["salary"].sum().reset_index()
+salary_pivot = salary_total.pivot(index="division", columns="date", values="salary")
+print(salary_pivot)
+
+# 4. Salary as percentage of division total
+print("\n4. Salary as % of division total:")
+df["division_total"] = df.groupby(["division", "date"])["salary"].transform("sum")
+df["pct_of_division"] = (df["salary"] / df["division_total"] * 100).round(1)
+print(df[["last_name", "division", "date", "salary", "pct_of_division"]].head(10))
+
+# 5. Crosstab
+print("\n5. Employee count by division and category:")
+crosstab = pd.crosstab(df["division"], df["employee_category"])
+print(crosstab)
+```
+:::
+:::
+
+## Summary
+
+You've learned the core data transformation operations:
+
+- **`groupby()`**: Split-apply-combine pattern for aggregation
+- **`agg()`**: Apply multiple aggregation functions at once
+- **`pivot_table()`**: Reshape from long to wide format
+- **`melt()`**: Reshape from wide to long format
+- **`transform()`**: Add aggregated values back to original data
+- **`crosstab()`**: Quick frequency tables
+
+Key differences from R:
+- pandas uses `groupby().agg()` instead of `group_by() %>% summarize()`
+- Column selection syntax: `df.groupby("g")["col"]` vs `summarize(col = func(col))`
+- `pivot_table()` is more powerful than `pivot_wider()` with built-in aggregation
+
+## Next Steps
+
+Continue to [Lesson 6: Joining and Merging Data](06-joining-merging.qmd) to learn how to combine multiple DataFrames.

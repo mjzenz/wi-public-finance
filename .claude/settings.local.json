@@ -4,7 +4,23 @@
       "Bash(py -3 -c:*)",
       "Bash(py -3 -m pip install:*)",
       "Bash(py -3 -m py_compile salary_app.py)",
-      "Bash(timeout 10 py:*)"
+      "Bash(timeout 10 py:*)",
+      "Bash(python3:*)",
+      "Bash(python -m pip:*)",
+      "Bash(python:*)",
+      "Bash(py:*)",
+      "Bash(ls -lh \"C:\\\\Users\\\\mjzen\\\\documents\\\\wi-public-finance\\\\data\"\" | grep -v \"^. \")",
+      "WebFetch(domain:mjzenz.org)",
+      "Bash(unzip:*)",
+      "Bash(quarto render:*)",
+      "Bash(cmd.exe /c \"where quarto\")",
+      "Bash(cmd.exe /c \"where quarto 2>&1\")",
+      "Bash(\"/c/Program Files/Quarto/bin/quarto.exe\" render)",
+      "Bash(C:/Python313/python.exe -m pip install:*)",
+      "Bash(QUARTO_PYTHON=\"C:/Python313/python.exe\" \"/c/Program Files/Quarto/bin/quarto.exe\" render:*)",
+      "Bash(\"C:/Python313/python.exe\":*)",
+      "Bash(wc:*)",
+      "Bash(\"/c/Program Files/Quarto/bin/quarto.exe\" render tutorial/)"
     ]
   }
 }

@@ -1,0 +1,827 @@
+---
+title: "Markov Chain Workforce Modeling"
+subtitle: "Lesson 24"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Explain Markov chain concepts (states, transitions, stationarity) in a workforce context
+- Build transition probability matrices from employee movement data
+- Estimate transition probabilities from historical observations
+- Predict future workforce composition using matrix multiplication with NumPy
+- Compute steady-state distributions and interpret long-run workforce structure
+- Model absorbing states such as departure and retirement
+- Assess sensitivity of workforce projections to changes in promotion rates
+- Visualize transition matrices with heatmaps and Sankey diagrams using Plotly
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### What is a Markov Chain?
+
+A **Markov chain** is a mathematical model for systems that transition between discrete **states** over time. The key assumption is the **Markov property**: the probability of moving to any future state depends *only* on the current state, not on the history of how we got here.
+
+In workforce modeling, the states are employee categories (e.g., rank, division, or employment status), and the **transition probabilities** describe how employees move between states from one period to the next.
+
+Key terminology:
+
+- **State space**: The set of all possible states (e.g., Assistant Prof, Associate Prof, Full Prof, Departed)
+- **Transition probability matrix (P)**: A square matrix where entry $P_{ij}$ is the probability of moving from state $i$ to state $j$. Each row sums to 1.
+- **Stationarity**: The assumption that transition probabilities do not change over time (time-homogeneous chain)
+- **Steady state**: The long-run distribution the workforce converges to, regardless of starting composition
+- **Absorbing state**: A state that, once entered, cannot be left (e.g., "Departed")
+:::
+
+::: {.concept-box}
+#### The Demographic Cliff and Strategic Workforce Planning
+
+Workforce modeling isn't happening in a vacuum — higher education faces a **structural demographic shift** that makes these tools urgently relevant:
+
+**The enrollment cliff (2025-2037)**: Birth rates dropped sharply after 2008, meaning the traditional college-age population (18-year-olds) will decline significantly starting around 2025 and bottoming out around 2037. For many institutions, this means fewer students, less tuition revenue, and ultimately fewer positions to fill.
+
+**Implications for workforce modeling**:
+
+- **Hiring freezes vs. strategic growth**: A Markov model can project what happens if you freeze hiring in some areas while strategically growing others (e.g., growing data science while allowing retirements in declining departments to go unfilled). The steady-state analysis shows whether this strategy converges to a viable workforce composition.
+- **Retirement wave**: Many faculty hired during the 1990s expansion are approaching retirement. Your transition matrix captures retirement rates by rank and seniority — projecting the retirement wave helps plan for knowledge transfer and succession.
+- **Composition shifts**: As senior faculty retire and are replaced (or not) by junior hires, the faculty rank distribution shifts. Markov projections can show how long it takes for the workforce to reach a new equilibrium after a policy change.
+
+**Connecting to institutional strategy**: UW's strategic plan includes goals for research growth, teaching innovation, and diversity. Workforce models can test whether current hiring and promotion patterns will achieve diversity targets, maintain research capacity, or create unsustainable cost trajectories. A Markov model showing that "at current promotion rates, the share of Full Professors will exceed 60% by 2030, creating a top-heavy salary structure" is the kind of insight that changes policy.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Wong color palette for accessibility
+wong = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]
+```
+
+## Building Transition Data from Employee Movements
+
+We begin by generating a realistic dataset of faculty who move between ranks over several annual observation periods. Each row records one employee's state in consecutive years.
+
+```{python}
+np.random.seed(42)
+
+states = ["Assistant Prof", "Associate Prof", "Full Prof", "Departed"]
+n_employees = 500
+n_years = 8
+
+# True transition probabilities (rows = from, cols = to)
+# Order: Assistant, Associate, Full, Departed
+true_P = np.array([
+    [0.70, 0.18, 0.00, 0.12],  # Assistant Prof
+    [0.00, 0.72, 0.18, 0.10],  # Associate Prof
+    [0.00, 0.00, 0.88, 0.12],  # Full Prof
+    [0.00, 0.00, 0.00, 1.00],  # Departed (absorbing)
+])
+
+# Generate employee histories
+records = []
+for emp_id in range(n_employees):
+    # Starting state: weighted toward Assistant Prof
+    current = np.random.choice(
+        len(states), p=[0.50, 0.30, 0.20, 0.00]
+    )
+    division = np.random.choice([
+        "Letters & Science", "Engineering", "Medicine", "Business"
+    ])
+
+    for year in range(2017, 2017 + n_years):
+        records.append({
+            "employee_id": f"EMP{emp_id:04d}",
+            "year": year,
+            "state": states[current],
+            "division": division,
+        })
+        # Transition to next state
+        current = np.random.choice(len(states), p=true_P[current])
+
+df = pd.DataFrame(records)
+print(f"Records: {len(df):,}")
+print(f"Employees: {df['employee_id'].nunique()}")
+print(f"\nState counts (all years):")
+print(df["state"].value_counts())
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+library(dplyr)
+library(tidyr)
+
+# In R, you might use the markovchain package:
+# install.packages("markovchain")
+library(markovchain)
+
+# Create transition matrix from observed data
+transitions <- df %>%
+  arrange(employee_id, year) %>%
+  group_by(employee_id) %>%
+  mutate(next_state = lead(state)) %>%
+  filter(!is.na(next_state))
+
+# Fit a Markov chain
+mc_fit <- markovchainFit(data = transitions$state)
+mc_fit$estimate
+```
+:::
+
+## Estimating Transition Probabilities
+
+To estimate the transition matrix, we count how many employees moved from each state to every other state, then normalize each row to get probabilities.
+
+```{python}
+# Create paired observations: (state_t, state_t+1)
+df_sorted = df.sort_values(["employee_id", "year"])
+df_sorted["next_state"] = df_sorted.groupby("employee_id")["state"].shift(-1)
+transitions = df_sorted.dropna(subset=["next_state"]).copy()
+
+print(f"Transition observations: {len(transitions):,}")
+print(transitions[["employee_id", "year", "state", "next_state"]].head(10))
+```
+
+```{python}
+# Count transitions
+transition_counts = pd.crosstab(
+    transitions["state"], transitions["next_state"]
+)
+
+# Reorder rows and columns to match our state ordering
+transition_counts = transition_counts.reindex(
+    index=states, columns=states, fill_value=0
+)
+
+print("Transition Counts:")
+print(transition_counts)
+```
+
+```{python}
+# Normalize to get probabilities
+P_estimated = transition_counts.div(transition_counts.sum(axis=1), axis=0)
+
+print("\nEstimated Transition Probability Matrix:")
+print(P_estimated.round(3))
+
+print("\nRow sums (should be 1.0):")
+print(P_estimated.sum(axis=1).round(6))
+```
+
+::: {.concept-box}
+#### Reading the Transition Matrix
+
+Each row of the matrix describes the fate of employees currently in that state. For example, if the "Assistant Prof" row reads `[0.70, 0.18, 0.00, 0.12]`, it means:
+
+- 70% of Assistant Professors remain Assistant Professors next year
+- 18% are promoted to Associate Professor
+- 0% jump directly to Full Professor
+- 12% depart the university
+
+The **diagonal** entries represent retention rates -- the probability of staying in the same state. Higher diagonal values mean lower turnover.
+:::
+
+## Visualizing the Transition Matrix
+
+### Heatmap
+
+```{python}
+fig = px.imshow(
+    P_estimated.values,
+    x=states,
+    y=states,
+    text_auto=".2f",
+    color_continuous_scale=[[0, "#FFFFFF"], [0.5, "#56B4E9"], [1.0, "#0072B2"]],
+    labels={"x": "To State", "y": "From State", "color": "Probability"},
+    title="Estimated Transition Probability Matrix"
+)
+
+fig.update_layout(
+    width=600, height=500,
+    xaxis_title="To State",
+    yaxis_title="From State"
+)
+fig.show()
+```
+
+### Sankey Diagram
+
+A Sankey diagram shows the flow of employees between states, making the volume of transitions immediately visible.
+
+```{python}
+# Build Sankey from transition counts
+source_indices = []
+target_indices = []
+values = []
+link_colors = []
+
+# Create labels: "State (Year t)" on left, "State (Year t+1)" on right
+left_labels = [f"{s} (t)" for s in states]
+right_labels = [f"{s} (t+1)" for s in states]
+all_labels = left_labels + right_labels
+
+for i, from_state in enumerate(states):
+    for j, to_state in enumerate(states):
+        count = transition_counts.iloc[i, j]
+        if count > 0:
+            source_indices.append(i)          # left side
+            target_indices.append(len(states) + j)  # right side
+            values.append(count)
+            link_colors.append(wong[i % len(wong)])
+
+fig = go.Figure(data=[go.Sankey(
+    node=dict(
+        pad=20,
+        thickness=20,
+        label=all_labels,
+        color=[wong[i % len(wong)] for i in range(len(states))] +
+              [wong[i % len(wong)] for i in range(len(states))]
+    ),
+    link=dict(
+        source=source_indices,
+        target=target_indices,
+        value=values,
+        color=[c.replace(")", ", 0.4)").replace("rgb", "rgba")
+               if "rgb" in c else c + "66"
+               for c in link_colors]
+    )
+)])
+
+fig.update_layout(
+    title="Employee Transitions Between States (One-Year Flow)",
+    font_size=12,
+    width=700, height=450
+)
+fig.show()
+```
+
+::: {.pycharm-tip}
+#### PyCharm: Viewing Plotly in Scientific Mode
+
+In PyCharm Professional, enable **Scientific Mode** (View > Scientific Mode) to see Plotly charts rendered in the built-in SciView panel. In Community Edition, Plotly figures will open in your browser. You can also call `fig.write_html("sankey.html")` and open the file manually.
+:::
+
+## Predicting Future Workforce Composition
+
+With the transition matrix in hand, we can project future workforce composition using matrix multiplication. If $\mathbf{s}_t$ is the workforce distribution vector at time $t$, then:
+
+$$\mathbf{s}_{t+1} = \mathbf{s}_t \cdot P$$
+
+After $n$ steps:
+
+$$\mathbf{s}_{t+n} = \mathbf{s}_t \cdot P^n$$
+
+```{python}
+# Current workforce composition (exclude Departed for initial headcount)
+active = df[df["year"] == 2017]
+active_counts = active["state"].value_counts().reindex(states, fill_value=0)
+total_active = active_counts[states[:3]].sum()
+
+# Express as proportions (include Departed = 0 initially)
+s0 = np.array([
+    active_counts["Assistant Prof"] / total_active,
+    active_counts["Associate Prof"] / total_active,
+    active_counts["Full Prof"] / total_active,
+    0.0  # No one starts in Departed for our projection
+])
+
+print("Initial workforce distribution (proportions):")
+for state, prop in zip(states, s0):
+    print(f"  {state:18s}: {prop:.3f}")
+
+# Convert estimated P to numpy array
+P = P_estimated.values.copy()
+```
+
+```{python}
+# Project forward 20 years
+n_projection = 20
+projections = [s0.copy()]
+
+for year in range(n_projection):
+    s_next = projections[-1] @ P
+    projections.append(s_next)
+
+proj_df = pd.DataFrame(projections, columns=states)
+proj_df["year"] = range(n_projection + 1)
+
+print(f"\nProjected composition over {n_projection} years:")
+print(proj_df.round(3).to_string(index=False))
+```
+
+```{python}
+# Visualize projections
+fig = go.Figure()
+
+for i, state in enumerate(states):
+    fig.add_trace(go.Scatter(
+        x=proj_df["year"],
+        y=proj_df[state],
+        mode="lines+markers",
+        name=state,
+        line=dict(color=wong[i], width=2),
+        marker=dict(size=5)
+    ))
+
+fig.update_layout(
+    title="Projected Workforce Composition Over 20 Years",
+    xaxis_title="Years from Now",
+    yaxis_title="Proportion of Original Cohort",
+    yaxis_tickformat=".0%",
+    legend_title="State",
+    height=450
+)
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+library(expm)  # for matrix power
+
+# Initial distribution
+s0 <- c(0.50, 0.30, 0.20, 0.00)
+
+# Project 10 years
+P_mat <- as.matrix(P_estimated)
+s10 <- s0 %*% (P_mat %^% 10)
+print(s10)
+
+# Or iteratively
+s <- s0
+for (i in 1:20) {
+  s <- s %*% P_mat
+  cat(sprintf("Year %2d: %s\n", i, paste(round(s, 3), collapse = ", ")))
+}
+```
+:::
+
+## Steady-State Analysis
+
+The **steady-state distribution** is the long-run equilibrium: the workforce composition the system converges to regardless of starting conditions. It is found by solving:
+
+$$\boldsymbol{\pi} = \boldsymbol{\pi} \cdot P$$
+
+For chains with an absorbing state (like "Departed"), all probability eventually flows into that absorbing state. So we first analyze the steady state of the **non-absorbing sub-chain** (the transient states only), then separately examine time-to-absorption.
+
+```{python}
+# For the absorbing chain, the long run is trivial: everyone departs.
+# Let's find the steady state of the *transient* sub-chain
+# by renormalizing rows after removing the Departed column.
+
+transient_states = states[:3]  # Assistant, Associate, Full
+P_transient = P[:3, :3].copy()
+
+# Renormalize rows (redistribute departure probability)
+row_sums = P_transient.sum(axis=1, keepdims=True)
+P_renorm = P_transient / row_sums
+
+print("Renormalized Transition Matrix (no departures):")
+print(pd.DataFrame(P_renorm, index=transient_states, columns=transient_states).round(3))
+```
+
+```{python}
+# Find steady state by eigenvalue decomposition
+eigenvalues, eigenvectors = np.linalg.eig(P_renorm.T)
+
+# Steady state corresponds to eigenvalue = 1
+idx = np.argmin(np.abs(eigenvalues - 1.0))
+steady = np.real(eigenvectors[:, idx])
+steady = steady / steady.sum()  # Normalize
+
+print("Steady-State Distribution (ignoring departures):")
+for state, prop in zip(transient_states, steady):
+    print(f"  {state:18s}: {prop:.3f} ({prop*100:.1f}%)")
+```
+
+```{python}
+# Verify by iterating many times
+s_check = np.array([1/3, 1/3, 1/3])
+for _ in range(500):
+    s_check = s_check @ P_renorm
+
+print("\nVerification (500 iterations from uniform start):")
+for state, prop in zip(transient_states, s_check):
+    print(f"  {state:18s}: {prop:.3f}")
+```
+
+::: {.concept-box}
+#### Interpreting the Steady State
+
+The steady-state vector tells you the **long-run equilibrium** workforce mix, assuming constant transition rates and ignoring departures. For example, if the steady state is roughly [0.25, 0.30, 0.45], it means the university's faculty would naturally tend toward 25% Assistant, 30% Associate, and 45% Full Professors.
+
+If your current composition differs significantly from the steady state, the system is "out of equilibrium" and will drift toward it over time -- unless policies change the transition rates.
+:::
+
+## Absorbing States: Time to Departure
+
+With "Departed" as an absorbing state, we can compute the **expected time to absorption** (average years until departure) from each transient state using the **fundamental matrix**:
+
+$$N = (I - Q)^{-1}$$
+
+where $Q$ is the sub-matrix of transient-to-transient transition probabilities.
+
+```{python}
+# Q is the transient sub-matrix (transitions among non-departed states)
+Q = P[:3, :3].copy()
+
+print("Transient sub-matrix Q:")
+print(pd.DataFrame(Q, index=transient_states, columns=transient_states).round(3))
+
+# Fundamental matrix
+I = np.eye(len(transient_states))
+N = np.linalg.inv(I - Q)
+
+print("\nFundamental Matrix N = (I - Q)^(-1):")
+print(pd.DataFrame(N, index=transient_states, columns=transient_states).round(2))
+
+# Expected time to absorption = row sums of N
+expected_years = N.sum(axis=1)
+print("\nExpected Years Until Departure:")
+for state, yrs in zip(transient_states, expected_years):
+    print(f"  Starting as {state:18s}: {yrs:.1f} years")
+```
+
+```{python}
+# Visualize expected career duration
+fig = px.bar(
+    x=transient_states,
+    y=expected_years,
+    color=transient_states,
+    color_discrete_sequence=wong,
+    title="Expected Years Until Departure by Starting Rank",
+    labels={"x": "Starting Rank", "y": "Expected Years"}
+)
+
+fig.update_layout(showlegend=False, yaxis_title="Expected Years")
+fig.show()
+```
+
+## Sensitivity Analysis: Changing Promotion Rates
+
+A key strength of Markov models is the ability to ask "what if?" questions. How does the long-run workforce composition change if promotion rates increase or decrease?
+
+```{python}
+# Vary the Assistant -> Associate promotion rate
+promo_rates = np.arange(0.05, 0.36, 0.03)
+sensitivity_results = []
+
+for promo_rate in promo_rates:
+    # Adjust the transition matrix
+    P_mod = P.copy()
+    # Assistant Prof row: adjust promotion and retention
+    departure_rate = P_mod[0, 3]  # Keep departure rate fixed
+    P_mod[0, 1] = promo_rate
+    P_mod[0, 0] = 1.0 - promo_rate - departure_rate  # Retention adjusts
+
+    # Renormalize transient sub-chain
+    Q_mod = P_mod[:3, :3]
+    Q_renorm = Q_mod / Q_mod.sum(axis=1, keepdims=True)
+
+    # Find steady state
+    evals, evecs = np.linalg.eig(Q_renorm.T)
+    idx = np.argmin(np.abs(evals - 1.0))
+    ss = np.real(evecs[:, idx])
+    ss = ss / ss.sum()
+
+    for j, state in enumerate(transient_states):
+        sensitivity_results.append({
+            "promotion_rate": promo_rate,
+            "state": state,
+            "steady_state_pct": ss[j] * 100
+        })
+
+sens_df = pd.DataFrame(sensitivity_results)
+
+fig = px.line(
+    sens_df,
+    x="promotion_rate",
+    y="steady_state_pct",
+    color="state",
+    color_discrete_sequence=wong,
+    markers=True,
+    title="Sensitivity: Steady-State Composition vs. Assistant→Associate Promotion Rate",
+    labels={
+        "promotion_rate": "Assistant → Associate Promotion Rate",
+        "steady_state_pct": "Steady-State Proportion (%)",
+        "state": "Rank"
+    }
+)
+
+fig.update_layout(
+    xaxis_tickformat=".0%",
+    yaxis_title="Steady-State Proportion (%)",
+    height=450
+)
+fig.show()
+```
+
+```{python}
+# Sensitivity on departure rate for Full Professors
+departure_rates = np.arange(0.04, 0.25, 0.02)
+depart_results = []
+
+for dep_rate in departure_rates:
+    P_mod = P.copy()
+    P_mod[2, 3] = dep_rate
+    P_mod[2, 2] = 1.0 - dep_rate  # Full Prof retention adjusts
+
+    # Expected time to absorption from each state
+    Q_mod = P_mod[:3, :3]
+    N_mod = np.linalg.inv(np.eye(3) - Q_mod)
+    exp_years = N_mod.sum(axis=1)
+
+    for j, state in enumerate(transient_states):
+        depart_results.append({
+            "full_prof_departure_rate": dep_rate,
+            "starting_state": state,
+            "expected_years": exp_years[j]
+        })
+
+dep_df = pd.DataFrame(depart_results)
+
+fig = px.line(
+    dep_df,
+    x="full_prof_departure_rate",
+    y="expected_years",
+    color="starting_state",
+    color_discrete_sequence=wong,
+    markers=True,
+    title="Sensitivity: Expected Career Duration vs. Full Prof Departure Rate",
+    labels={
+        "full_prof_departure_rate": "Full Professor Departure Rate",
+        "expected_years": "Expected Years Until Departure",
+        "starting_state": "Starting Rank"
+    }
+)
+
+fig.update_layout(xaxis_tickformat=".0%", height=450)
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Sensitivity analysis in R
+library(purrr)
+library(ggplot2)
+
+promo_rates <- seq(0.05, 0.35, by = 0.03)
+
+results <- map_dfr(promo_rates, function(pr) {
+  P_mod <- P_mat
+  P_mod[1, 2] <- pr
+  P_mod[1, 1] <- 1 - pr - P_mod[1, 4]
+
+  Q <- P_mod[1:3, 1:3]
+  Q_renorm <- Q / rowSums(Q)
+
+  # Steady state via eigen decomposition
+  ev <- eigen(t(Q_renorm))
+  ss <- Re(ev$vectors[, 1])
+  ss <- ss / sum(ss)
+
+  tibble(
+    promotion_rate = pr,
+    state = c("Assistant", "Associate", "Full"),
+    proportion = ss
+  )
+})
+
+ggplot(results, aes(promotion_rate, proportion, color = state)) +
+  geom_line() + geom_point() +
+  scale_y_continuous(labels = scales::percent)
+```
+:::
+
+## Division-Level Transition Analysis
+
+Markov models can also be applied to inter-division mobility. Let us estimate transition probabilities between academic divisions.
+
+```{python}
+# Generate division-level movement data
+np.random.seed(123)
+
+divisions = ["Letters & Science", "Engineering", "Medicine", "Business"]
+n_staff = 300
+n_periods = 6
+
+div_records = []
+for emp_id in range(n_staff):
+    current_div = np.random.choice(divisions)
+    for year in range(2019, 2019 + n_periods):
+        div_records.append({
+            "employee_id": f"STAFF{emp_id:04d}",
+            "year": year,
+            "division": current_div
+        })
+        # Small probability of switching divisions
+        if np.random.random() < 0.08:
+            other_divs = [d for d in divisions if d != current_div]
+            current_div = np.random.choice(other_divs)
+
+div_df = pd.DataFrame(div_records)
+
+# Estimate division transition matrix
+div_df_sorted = div_df.sort_values(["employee_id", "year"])
+div_df_sorted["next_division"] = div_df_sorted.groupby("employee_id")["division"].shift(-1)
+div_transitions = div_df_sorted.dropna(subset=["next_division"])
+
+div_counts = pd.crosstab(
+    div_transitions["division"],
+    div_transitions["next_division"]
+).reindex(index=divisions, columns=divisions, fill_value=0)
+
+div_P = div_counts.div(div_counts.sum(axis=1), axis=0)
+
+print("Division Transition Matrix:")
+print(div_P.round(3))
+```
+
+```{python}
+# Heatmap of division transitions
+fig = px.imshow(
+    div_P.values,
+    x=divisions,
+    y=divisions,
+    text_auto=".3f",
+    color_continuous_scale=[[0, "#FFFFFF"], [0.5, "#E69F00"], [1.0, "#D55E00"]],
+    labels={"x": "To Division", "y": "From Division", "color": "Probability"},
+    title="Inter-Division Transition Probabilities"
+)
+
+fig.update_layout(width=600, height=500)
+fig.show()
+```
+
+::: {.pycharm-tip}
+#### PyCharm: Debugging Matrix Operations
+
+When working with transition matrices, use PyCharm's variable explorer to inspect array shapes and values. Set a breakpoint after computing `P` and hover over it, or add it to the Watches panel. Verify that each row sums to 1.0 -- a row that does not sum to 1.0 indicates a data issue.
+:::
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 24: Workforce Projection with Policy Scenarios
+
+Using the faculty rank transition data generated in this lesson:
+
+1. Estimate the transition matrix from the generated data (already done above -- use `P_estimated`)
+2. Starting from a cohort of 100 Assistant Professors, project the workforce composition over 15 years
+3. Compute the expected years until departure for each starting rank
+4. Create a "fast-track promotion" scenario where the Assistant-to-Associate promotion rate doubles. Compare the 10-year projection to the baseline.
+5. Visualize both scenarios side-by-side using a Plotly subplot figure
+6. What is the steady-state rank distribution under each scenario?
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+#| eval: false
+
+# 1. Transition matrix (reuse P_estimated from above)
+P_base = P_estimated.values.copy()
+print("Baseline Transition Matrix:")
+print(pd.DataFrame(P_base, index=states, columns=states).round(3))
+
+# 2. Project 100 Assistant Professors over 15 years
+s0_cohort = np.array([1.0, 0.0, 0.0, 0.0])  # All start as Asst Prof
+n_years_proj = 15
+
+baseline_proj = [s0_cohort.copy()]
+for _ in range(n_years_proj):
+    baseline_proj.append(baseline_proj[-1] @ P_base)
+
+baseline_df = pd.DataFrame(baseline_proj, columns=states)
+baseline_df["year"] = range(n_years_proj + 1)
+baseline_df["scenario"] = "Baseline"
+
+# Scale to 100 people
+for s in states:
+    baseline_df[s] = baseline_df[s] * 100
+
+print("\nBaseline Projection (headcount out of 100):")
+print(baseline_df[["year"] + states].round(1).to_string(index=False))
+
+# 3. Expected years until departure
+Q_base = P_base[:3, :3]
+N_base = np.linalg.inv(np.eye(3) - Q_base)
+exp_base = N_base.sum(axis=1)
+
+print("\nExpected Years Until Departure (Baseline):")
+for state, yrs in zip(states[:3], exp_base):
+    print(f"  {state:18s}: {yrs:.1f} years")
+
+# 4. Fast-track scenario: double Asst -> Assoc promotion rate
+P_fast = P_base.copy()
+original_promo = P_fast[0, 1]
+P_fast[0, 1] = min(original_promo * 2, 0.50)  # Cap at 50%
+P_fast[0, 0] = 1.0 - P_fast[0, 1] - P_fast[0, 2] - P_fast[0, 3]
+
+print(f"\nFast-Track: Asst→Assoc rate changed from {original_promo:.3f} to {P_fast[0,1]:.3f}")
+
+fast_proj = [s0_cohort.copy()]
+for _ in range(n_years_proj):
+    fast_proj.append(fast_proj[-1] @ P_fast)
+
+fast_df = pd.DataFrame(fast_proj, columns=states)
+fast_df["year"] = range(n_years_proj + 1)
+fast_df["scenario"] = "Fast-Track"
+
+for s in states:
+    fast_df[s] = fast_df[s] * 100
+
+# 5. Side-by-side visualization
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=["Baseline Promotion Rates", "Fast-Track Promotion"],
+    shared_yaxes=True
+)
+
+for i, state in enumerate(states):
+    fig.add_trace(
+        go.Scatter(
+            x=baseline_df["year"], y=baseline_df[state],
+            mode="lines+markers", name=state,
+            line=dict(color=wong[i]),
+            legendgroup=state, showlegend=True
+        ),
+        row=1, col=1
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=fast_df["year"], y=fast_df[state],
+            mode="lines+markers", name=state,
+            line=dict(color=wong[i], dash="dash"),
+            legendgroup=state, showlegend=False
+        ),
+        row=1, col=2
+    )
+
+fig.update_layout(
+    title="Workforce Projection: Baseline vs Fast-Track (Cohort of 100)",
+    height=450, width=900,
+    yaxis_title="Number of Employees"
+)
+fig.update_xaxes(title_text="Years", row=1, col=1)
+fig.update_xaxes(title_text="Years", row=1, col=2)
+fig.show()
+
+# 6. Steady-state comparison
+scenarios = {"Baseline": P_base, "Fast-Track": P_fast}
+
+print("\nSteady-State Distributions (ignoring departures):")
+print("-" * 55)
+for name, P_mat in scenarios.items():
+    Q = P_mat[:3, :3]
+    Q_renorm = Q / Q.sum(axis=1, keepdims=True)
+
+    evals, evecs = np.linalg.eig(Q_renorm.T)
+    idx = np.argmin(np.abs(evals - 1.0))
+    ss = np.real(evecs[:, idx])
+    ss = ss / ss.sum()
+
+    print(f"\n  {name}:")
+    for state, prop in zip(states[:3], ss):
+        print(f"    {state:18s}: {prop:.1%}")
+
+# Compare at year 10
+print("\nYear-10 Comparison (out of 100):")
+print(f"  {'State':<18s} {'Baseline':>10s} {'Fast-Track':>10s} {'Difference':>10s}")
+for state in states:
+    b = baseline_df.loc[baseline_df["year"] == 10, state].values[0]
+    f = fast_df.loc[fast_df["year"] == 10, state].values[0]
+    print(f"  {state:<18s} {b:10.1f} {f:10.1f} {f-b:+10.1f}")
+```
+:::
+:::
+
+## Summary
+
+In this lesson, you learned to apply Markov chains to workforce planning:
+
+- **Transition matrices** capture employee movement probabilities between states (ranks, divisions, or employment status)
+- **Estimation** from historical data uses cross-tabulation and row normalization
+- **Matrix multiplication** with NumPy projects future workforce composition: $\mathbf{s}_{t+n} = \mathbf{s}_t \cdot P^n$
+- **Steady-state analysis** reveals the long-run equilibrium the workforce tends toward
+- **Absorbing states** model permanent exits; the fundamental matrix $N = (I - Q)^{-1}$ gives expected time to departure
+- **Sensitivity analysis** shows how changes in promotion or departure rates ripple through the system
+- **Plotly heatmaps and Sankey diagrams** make transition patterns immediately interpretable
+
+Key takeaways for workforce planners:
+
+- Small changes in promotion rates can substantially shift long-run composition
+- The steady state may be far from the current workforce mix, signaling impending drift
+- Expected time-to-absorption helps forecast replacement hiring needs
+- Markov models assume stationary transition rates -- revisit your estimates as policies change
+
+## Next Steps
+
+Continue to [Lesson 25: Peer Institution Salary Comparison](25-peer-comparison.qmd) to learn how to benchmark UW-Madison compensation against comparable institutions.

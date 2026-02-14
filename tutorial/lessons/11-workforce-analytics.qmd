@@ -1,0 +1,354 @@
+---
+title: "Workforce Analytics: Headcount and FTE"
+subtitle: "Lesson 11"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Distinguish between headcount and FTE (Full-Time Equivalent) metrics
+- Calculate FTE-adjusted salary and compensation totals
+- Analyze headcount and FTE trends over time
+- Measure departmental composition changes
+- Identify staffing pattern shifts post-reorganization
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Key Workforce Concept: Headcount vs FTE
+
+**Headcount** counts each person once, regardless of work hours.
+
+**FTE (Full-Time Equivalent)** measures work capacity:
+- A full-time employee = 1.0 FTE
+- A half-time employee = 0.5 FTE
+- Two half-time employees = 1.0 FTE total
+
+For workforce planning and cost analysis, FTE is often more meaningful than headcount.
+:::
+
+::: {.concept-box}
+#### Revenue Sources and Cost Drivers in Higher Education
+
+To understand why workforce metrics matter, you need to understand the financial structure of a public university:
+
+**Revenue side:**
+
+- **State appropriations (GPR)**: At UW-Madison, state funding covers roughly 15-18% of the operating budget — down from over 30% in the 1990s. This decline is the single biggest driver of budget pressure.
+- **Tuition and fees**: Subject to the Board of Regents tuition freeze since 2013 (with limited recent increases), capping a major revenue source.
+- **Federal research grants**: UW-Madison is a top-5 research institution (~$1.5B/year in research expenditures), but grant funding covers specific project costs, not general operations.
+- **Auxiliary and other**: Clinical revenue (UW Health), gifts, and self-supporting operations.
+
+**Cost side:**
+
+- **Personnel costs are 70-80% of the operating budget** at most universities. Salaries, fringe benefits (health insurance, retirement), and related costs dominate spending.
+- Every FTE change directly moves the budget. Adding 10 FTE at an average total compensation of $120K costs $1.2M annually — a recurring obligation, not a one-time expense.
+
+This is why headcount and FTE trend analysis isn't just an HR exercise — it's the most important input to financial planning. When you calculate that a division's FTE grew 5% while its budget grew 2%, you've identified a structural deficit.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Create multi-period workforce data
+np.random.seed(42)
+
+dates = ["2022-01", "2022-07", "2023-01", "2023-07", "2024-01"]
+divisions = ["Letters & Science", "Medicine", "Engineering"]
+categories = ["Faculty", "Academic Staff", "University Staff"]
+
+records = []
+for date in dates:
+    for div in divisions:
+        n_employees = np.random.randint(15, 30)
+        for i in range(n_employees):
+            records.append({
+                "date": date,
+                "employee_id": f"{div[:3]}{date[:4]}{i:03d}",
+                "division": div,
+                "employee_category": np.random.choice(categories, p=[0.3, 0.4, 0.3]),
+                "fte": np.random.choice([1.0, 0.75, 0.5, 0.25], p=[0.7, 0.15, 0.1, 0.05]),
+                "salary": np.random.randint(45000, 150000)
+            })
+
+df = pd.DataFrame(records)
+df["date"] = pd.to_datetime(df["date"])
+print(f"Total records: {len(df)}")
+df.head(10)
+```
+
+## Headcount vs FTE Calculations
+
+### Basic Counts
+
+```{python}
+# Headcount by division and date
+headcount = df.groupby(["date", "division"]).size().reset_index(name="headcount")
+headcount_pivot = headcount.pivot(index="division", columns="date", values="headcount")
+print("Headcount by Division:")
+headcount_pivot
+```
+
+```{python}
+# FTE by division and date
+fte = df.groupby(["date", "division"])["fte"].sum().reset_index()
+fte_pivot = fte.pivot(index="division", columns="date", values="fte")
+print("FTE by Division:")
+fte_pivot.round(1)
+```
+
+### Average FTE per Employee
+
+```{python}
+# Average FTE shows proportion of part-time work
+avg_fte = df.groupby(["date", "division"]).agg(
+    headcount=("employee_id", "count"),
+    total_fte=("fte", "sum")
+).reset_index()
+
+avg_fte["avg_fte_per_employee"] = (avg_fte["total_fte"] / avg_fte["headcount"]).round(2)
+avg_fte_pivot = avg_fte.pivot(index="division", columns="date", values="avg_fte_per_employee")
+print("Average FTE per Employee:")
+avg_fte_pivot
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+df %>%
+  group_by(date, division) %>%
+  summarize(
+    headcount = n(),
+    total_fte = sum(fte),
+    avg_fte = mean(fte)
+  )
+```
+:::
+
+## Analyzing Workforce Trends
+
+### Change Over Time
+
+```{python}
+# Calculate change from first to last period
+first_date = df["date"].min()
+last_date = df["date"].max()
+
+first_period = df[df["date"] == first_date].groupby("division")["fte"].sum()
+last_period = df[df["date"] == last_date].groupby("division")["fte"].sum()
+
+fte_change = pd.DataFrame({
+    "fte_start": first_period,
+    "fte_end": last_period
+})
+fte_change["change"] = fte_change["fte_end"] - fte_change["fte_start"]
+fte_change["pct_change"] = ((fte_change["fte_end"] / fte_change["fte_start"]) - 1) * 100
+
+fte_change.round(1)
+```
+
+### Composition Analysis
+
+```{python}
+# Employee category composition by division
+composition = df.groupby(["date", "division", "employee_category"])["fte"].sum().reset_index()
+
+# Calculate percentage within each division-date
+composition["total_fte"] = composition.groupby(["date", "division"])["fte"].transform("sum")
+composition["pct_of_division"] = (composition["fte"] / composition["total_fte"] * 100).round(1)
+
+# Show latest period composition
+latest = composition[composition["date"] == last_date]
+composition_pivot = latest.pivot(index="division", columns="employee_category", values="pct_of_division")
+print("Employee Category Mix (% of FTE):")
+composition_pivot
+```
+
+## Cost Analysis
+
+### Total Salary Expenditure
+
+```{python}
+# FTE-adjusted salary represents actual cost
+df["fte_adjusted_salary"] = df["salary"] * df["fte"]
+
+cost_by_division = df.groupby(["date", "division"]).agg(
+    headcount=("employee_id", "count"),
+    total_fte=("fte", "sum"),
+    total_nominal_salary=("salary", "sum"),
+    total_fte_adjusted_salary=("fte_adjusted_salary", "sum")
+).reset_index()
+
+cost_by_division["avg_cost_per_fte"] = (
+    cost_by_division["total_fte_adjusted_salary"] / cost_by_division["total_fte"]
+).round(0)
+
+# Latest period
+latest_cost = cost_by_division[cost_by_division["date"] == last_date]
+latest_cost[["division", "total_fte", "total_fte_adjusted_salary", "avg_cost_per_fte"]]
+```
+
+## Detecting Organizational Changes
+
+### Division Appearance/Disappearance
+
+```{python}
+# Which divisions appear in which periods?
+div_by_date = df.groupby(["date", "division"]).size().unstack(fill_value=0)
+
+# Divisions present in first but not last period (or vice versa)
+first_divisions = set(df[df["date"] == first_date]["division"].unique())
+last_divisions = set(df[df["date"] == last_date]["division"].unique())
+
+print("Divisions in first period only:", first_divisions - last_divisions)
+print("Divisions in last period only:", last_divisions - first_divisions)
+print("Divisions in both:", first_divisions & last_divisions)
+```
+
+### Significant FTE Changes
+
+```{python}
+# Find divisions with large FTE changes
+significant_threshold = 0.20  # 20% change
+
+fte_by_div_date = df.groupby(["date", "division"])["fte"].sum().reset_index()
+fte_wide = fte_by_div_date.pivot(index="division", columns="date", values="fte")
+
+# Calculate overall change
+fte_wide["change_pct"] = (
+    (fte_wide[last_date] / fte_wide[first_date]) - 1
+) * 100
+
+significant_changes = fte_wide[abs(fte_wide["change_pct"]) > significant_threshold * 100]
+print(f"Divisions with >{significant_threshold:.0%} FTE change:")
+significant_changes[["change_pct"]].round(1)
+```
+
+## Full-Time vs Part-Time Analysis
+
+```{python}
+# Categorize employees by FTE level
+df["fte_category"] = pd.cut(
+    df["fte"],
+    bins=[0, 0.25, 0.5, 0.75, 1.0],
+    labels=["<25%", "25-50%", "50-75%", "75-100%"]
+)
+
+# Distribution of FTE categories
+fte_dist = df.groupby(["date", "fte_category"]).size().unstack(fill_value=0)
+fte_dist["total"] = fte_dist.sum(axis=1)
+
+# Calculate percentages
+for col in fte_dist.columns[:-1]:
+    fte_dist[f"{col}_pct"] = (fte_dist[col] / fte_dist["total"] * 100).round(1)
+
+fte_dist[[c for c in fte_dist.columns if "_pct" in c]]
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 11: Workforce Analysis
+
+1. Create workforce data with 3 divisions, 2 time periods, and varying FTE levels
+2. Calculate headcount and FTE totals by division for each period
+3. Identify which division had the largest FTE growth
+4. Calculate the percentage of employees who are part-time (<1.0 FTE)
+5. Compute the total salary cost per FTE by division
+6. Find divisions where the employee category mix changed significantly
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# 1. Create workforce data
+np.random.seed(99)
+data = []
+divisions = ["L&S", "Medicine", "Engineering"]
+dates = ["2023-01", "2024-01"]
+
+for date in dates:
+    for div in divisions:
+        n = np.random.randint(20, 35)
+        for i in range(n):
+            data.append({
+                "date": date,
+                "employee_id": f"{div[:1]}{date[-2:]}{i:02d}",
+                "division": div,
+                "category": np.random.choice(["Faculty", "Staff"], p=[0.35, 0.65]),
+                "fte": np.random.choice([1.0, 0.75, 0.5], p=[0.65, 0.20, 0.15]),
+                "salary": np.random.randint(50000, 130000)
+            })
+
+df = pd.DataFrame(data)
+df["date"] = pd.to_datetime(df["date"])
+print("1. Sample data:")
+print(df.head())
+
+# 2. Headcount and FTE by division and period
+summary = df.groupby(["date", "division"]).agg(
+    headcount=("employee_id", "count"),
+    total_fte=("fte", "sum")
+).reset_index()
+print("\n2. Headcount and FTE:")
+print(summary)
+
+# 3. Division with largest FTE growth
+fte_wide = summary.pivot(index="division", columns="date", values="total_fte")
+fte_wide["growth"] = fte_wide.iloc[:, 1] - fte_wide.iloc[:, 0]
+print("\n3. FTE growth by division:")
+print(fte_wide)
+print(f"Largest growth: {fte_wide['growth'].idxmax()}")
+
+# 4. Percentage part-time
+df["is_part_time"] = df["fte"] < 1.0
+part_time_pct = df.groupby("date")["is_part_time"].mean() * 100
+print("\n4. Percentage part-time:")
+print(part_time_pct.round(1))
+
+# 5. Cost per FTE
+df["fte_salary"] = df["salary"] * df["fte"]
+cost = df.groupby(["date", "division"]).agg(
+    total_fte=("fte", "sum"),
+    total_cost=("fte_salary", "sum")
+)
+cost["cost_per_fte"] = (cost["total_cost"] / cost["total_fte"]).round(0)
+print("\n5. Cost per FTE:")
+print(cost["cost_per_fte"])
+
+# 6. Category mix changes
+mix = df.groupby(["date", "division", "category"])["fte"].sum()
+mix_pct = mix / mix.groupby(["date", "division"]).transform("sum") * 100
+print("\n6. Category mix by division:")
+print(mix_pct.round(1).unstack())
+```
+:::
+:::
+
+## Summary
+
+You've learned workforce analytics fundamentals:
+
+- **Headcount vs FTE**: Use FTE for capacity and cost analysis
+- **Trend analysis**: Calculate changes over time with pivot tables
+- **Composition**: Analyze category mix within divisions
+- **Cost metrics**: FTE-adjusted salary for true cost analysis
+- **Change detection**: Identify significant organizational shifts
+
+Key insights:
+- FTE is more useful than headcount for most analyses
+- Look at both absolute and percentage changes
+- Monitor composition shifts that may indicate strategy changes
+
+## Next Steps
+
+Continue to [Lesson 12: Tracking Individuals Over Time](12-tracking-individuals.qmd) to learn about employee journey analysis.

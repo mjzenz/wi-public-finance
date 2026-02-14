@@ -1,0 +1,377 @@
+---
+title: "Compensation Analysis and Distributions"
+subtitle: "Lesson 10"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Calculate salary percentiles and distributions by group
+- Perform peer comparison analysis (how does an employee compare to similar roles?)
+- Identify salary outliers and anomalies
+- Understand compensation equity analysis basics
+- Create meaningful salary comparison visualizations
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Key Financial Concept: Peer Comparison
+
+Compensation analysis often requires comparing an individual to their **peer group**. Key questions include:
+
+- Is this salary competitive for this job classification?
+- Where does this employee fall in the distribution?
+- Are there unexplained disparities between similar roles?
+
+Peer groups can be defined by job code, division, tenure, or combinations of factors.
+:::
+
+::: {.concept-box}
+#### Equal Pay Act and Title IX Compliance
+
+Compensation analysis in higher education operates within a **legal framework** that every analyst should understand:
+
+- **Equal Pay Act (1963)**: Requires equal pay for equal work regardless of sex. The four defensible factors for pay differences are seniority, merit, quantity/quality of production, and "any factor other than sex."
+- **Title VII of the Civil Rights Act (1964)**: Prohibits employment discrimination based on race, color, religion, sex, or national origin — including compensation decisions.
+- **Title IX (1972)**: While known for athletics, Title IX also covers employment in educational institutions. Sex-based salary disparities can trigger Title IX investigations.
+- **Executive Order 11246**: Federal contractors (which includes most research universities) must comply with OFCCP regulations, including affirmative action in compensation.
+
+When performing peer group comparisons, you are doing the same type of analysis that regulators use to detect **disparate impact**. If women in a job group earn systematically less than men after controlling for legitimate factors (rank, years, department), that's a potential compliance issue — not just an interesting finding.
+
+Practically, this means your choice of comparison variables matters legally as well as analytically. Including a variable like "negotiated starting salary" may mask discrimination if the negotiation process itself was biased. These are the kinds of nuances that distinguish routine reporting from actionable equity analysis.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Create realistic salary data with variation
+np.random.seed(42)
+
+n_employees = 50
+job_codes = ["FA001", "FA002", "AS001", "AS002", "CL001"]
+divisions = ["Letters & Science", "Medicine", "Engineering", "Business"]
+
+df = pd.DataFrame({
+    "employee_id": [f"E{i:03d}" for i in range(n_employees)],
+    "last_name": [f"Employee{i}" for i in range(n_employees)],
+    "jobcode": np.random.choice(job_codes, n_employees),
+    "division": np.random.choice(divisions, n_employees),
+    "years_employed": np.random.randint(1, 25, n_employees),
+})
+
+# Generate salaries based on job code with some variation
+salary_base = {"FA001": 85000, "FA002": 110000, "AS001": 65000, "AS002": 72000, "CL001": 55000}
+df["salary"] = df.apply(
+    lambda row: salary_base[row["jobcode"]] * (1 + row["years_employed"] * 0.02) +
+                np.random.normal(0, 5000),
+    axis=1
+).round(0)
+
+df.head(10)
+```
+
+## Calculating Percentiles
+
+### Basic Percentile Calculation
+
+```{python}
+# Overall salary percentiles
+percentiles = df["salary"].quantile([0.10, 0.25, 0.50, 0.75, 0.90])
+print("Salary Percentiles:")
+for p, val in percentiles.items():
+    print(f"  {int(p*100)}th percentile: ${val:,.0f}")
+```
+
+### Percentile Rank for Each Employee
+
+```{python}
+# Calculate each employee's percentile rank
+df["salary_percentile"] = df["salary"].rank(pct=True).round(2)
+df["salary_quartile"] = pd.qcut(df["salary"], q=4, labels=["Q1", "Q2", "Q3", "Q4"])
+
+df[["last_name", "jobcode", "salary", "salary_percentile", "salary_quartile"]].head(10)
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+df %>%
+  mutate(
+    salary_percentile = percent_rank(salary),
+    salary_quartile = ntile(salary, 4)
+  )
+```
+:::
+
+## Peer Group Analysis
+
+The most useful comparison is against peers in the same job classification:
+
+```{python}
+# Calculate percentile within job code (peer group)
+df["peer_percentile"] = df.groupby("jobcode")["salary"].transform(
+    lambda x: x.rank(pct=True)
+).round(2)
+
+# Calculate difference from peer median
+df["peer_median"] = df.groupby("jobcode")["salary"].transform("median")
+df["vs_peer_median"] = df["salary"] - df["peer_median"]
+df["vs_peer_median_pct"] = (df["vs_peer_median"] / df["peer_median"] * 100).round(1)
+
+df[["last_name", "jobcode", "salary", "peer_percentile", "peer_median", "vs_peer_median_pct"]].head(10)
+```
+
+### Peer Group Summary
+
+```{python}
+# Summary statistics by job code
+peer_summary = df.groupby("jobcode").agg(
+    count=("salary", "count"),
+    min_salary=("salary", "min"),
+    median_salary=("salary", "median"),
+    max_salary=("salary", "max"),
+    std_salary=("salary", "std")
+).round(0)
+
+peer_summary
+```
+
+## Identifying Outliers
+
+### Using IQR Method
+
+```{python}
+def identify_outliers_iqr(series, multiplier=1.5):
+    """Identify outliers using the IQR method."""
+    q1 = series.quantile(0.25)
+    q3 = series.quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - multiplier * iqr
+    upper_bound = q3 + multiplier * iqr
+    return (series < lower_bound) | (series > upper_bound)
+
+# Identify overall outliers
+df["is_outlier"] = identify_outliers_iqr(df["salary"])
+
+print(f"Number of outliers: {df['is_outlier'].sum()}")
+print("\nOutliers:")
+print(df[df["is_outlier"]][["last_name", "jobcode", "salary"]])
+```
+
+### Outliers Within Peer Groups
+
+```{python}
+# Identify outliers within each job code
+df["is_peer_outlier"] = df.groupby("jobcode")["salary"].transform(
+    lambda x: identify_outliers_iqr(x)
+)
+
+print("Peer group outliers:")
+outliers = df[df["is_peer_outlier"]][["last_name", "jobcode", "salary", "peer_percentile"]]
+print(outliers)
+```
+
+## Compensation Equity Analysis
+
+Equity analysis looks for unexplained salary differences between groups:
+
+```{python}
+# Compare median salaries by division within same job code
+equity = df.groupby(["jobcode", "division"]).agg(
+    count=("salary", "count"),
+    median_salary=("salary", "median")
+).reset_index()
+
+# Pivot for easier comparison
+equity_pivot = equity.pivot(index="jobcode", columns="division", values="median_salary")
+equity_pivot
+```
+
+### Salary Gap Analysis
+
+```{python}
+# Calculate the range (max - min) of median salaries across divisions
+# A large range suggests potential equity issues
+equity_range = equity.groupby("jobcode")["median_salary"].agg(["min", "max"])
+equity_range["gap"] = equity_range["max"] - equity_range["min"]
+equity_range["gap_pct"] = (equity_range["gap"] / equity_range["min"] * 100).round(1)
+
+equity_range
+```
+
+## Building a Peer Comparison Report
+
+Let's create a comprehensive report for a single employee:
+
+```{python}
+def peer_comparison_report(df, employee_id):
+    """Generate a peer comparison report for an employee."""
+    emp = df[df["employee_id"] == employee_id].iloc[0]
+
+    # Get peer group
+    peers = df[df["jobcode"] == emp["jobcode"]]
+
+    report = {
+        "employee": emp["last_name"],
+        "jobcode": emp["jobcode"],
+        "salary": emp["salary"],
+        "peer_count": len(peers),
+        "peer_min": peers["salary"].min(),
+        "peer_median": peers["salary"].median(),
+        "peer_max": peers["salary"].max(),
+        "percentile_rank": emp["peer_percentile"],
+        "vs_median": emp["salary"] - peers["salary"].median(),
+        "vs_median_pct": (emp["salary"] / peers["salary"].median() - 1) * 100
+    }
+
+    return report
+
+# Generate report for first employee
+report = peer_comparison_report(df, "E000")
+
+print("Peer Comparison Report")
+print("=" * 40)
+for key, value in report.items():
+    if isinstance(value, float):
+        print(f"{key:20}: {value:,.1f}")
+    else:
+        print(f"{key:20}: {value}")
+```
+
+## Salary Distribution Analysis
+
+```{python}
+# Distribution statistics by job code
+distribution = df.groupby("jobcode")["salary"].describe()
+distribution
+```
+
+### Skewness Analysis
+
+```{python}
+# Check for skewed distributions
+skewness = df.groupby("jobcode")["salary"].agg(
+    lambda x: x.skew()
+).reset_index()
+skewness.columns = ["jobcode", "skewness"]
+
+# Interpretation: positive skew = long right tail (few very high earners)
+skewness["interpretation"] = skewness["skewness"].apply(
+    lambda x: "Right-skewed (high earners)" if x > 0.5
+              else "Left-skewed (low earners)" if x < -0.5
+              else "Approximately normal"
+)
+skewness
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 10: Building a Peer Comparison Report
+
+1. Create a salary DataFrame with at least 30 employees across 4 job codes
+2. Calculate each employee's percentile rank within their job code
+3. Identify the top 10% earners in each job code
+4. Find employees who are below the 25th percentile of their peer group
+5. Calculate the salary gap between divisions for each job code
+6. Create a peer comparison report function that returns key metrics
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# 1. Create salary data
+np.random.seed(123)
+n = 40
+job_codes = ["FA001", "FA002", "AS001", "AS002"]
+divisions = ["L&S", "Medicine", "Engineering"]
+
+df = pd.DataFrame({
+    "employee_id": [f"E{i:03d}" for i in range(n)],
+    "last_name": [f"Emp{i}" for i in range(n)],
+    "jobcode": np.random.choice(job_codes, n),
+    "division": np.random.choice(divisions, n),
+})
+
+base = {"FA001": 85000, "FA002": 105000, "AS001": 62000, "AS002": 70000}
+df["salary"] = df["jobcode"].map(base) + np.random.normal(0, 8000, n)
+df["salary"] = df["salary"].round(0)
+
+print("1. Sample data (first 10 rows):")
+print(df.head(10))
+
+# 2. Percentile rank within job code
+df["peer_percentile"] = df.groupby("jobcode")["salary"].transform(
+    lambda x: x.rank(pct=True)
+).round(2)
+
+print("\n2. With peer percentiles:")
+print(df[["last_name", "jobcode", "salary", "peer_percentile"]].head(10))
+
+# 3. Top 10% earners per job code
+top_10_pct = df[df["peer_percentile"] >= 0.90]
+print("\n3. Top 10% earners by job code:")
+print(top_10_pct[["last_name", "jobcode", "salary", "peer_percentile"]])
+
+# 4. Below 25th percentile
+bottom_25_pct = df[df["peer_percentile"] <= 0.25]
+print("\n4. Below 25th percentile:")
+print(bottom_25_pct[["last_name", "jobcode", "salary", "peer_percentile"]])
+
+# 5. Salary gap between divisions
+gap_analysis = df.groupby(["jobcode", "division"])["salary"].median().reset_index()
+gap_pivot = gap_analysis.pivot(index="jobcode", columns="division", values="salary")
+gap_pivot["max_gap"] = gap_pivot.max(axis=1) - gap_pivot.min(axis=1)
+print("\n5. Division salary gaps:")
+print(gap_pivot)
+
+# 6. Peer comparison function
+def peer_report(data, emp_id):
+    emp = data[data["employee_id"] == emp_id].iloc[0]
+    peers = data[data["jobcode"] == emp["jobcode"]]
+
+    return {
+        "Employee": emp["last_name"],
+        "Job Code": emp["jobcode"],
+        "Salary": f"${emp['salary']:,.0f}",
+        "Peer Count": len(peers),
+        "Peer Median": f"${peers['salary'].median():,.0f}",
+        "Percentile": f"{emp['peer_percentile']:.0%}",
+        "Position": "Above median" if emp["salary"] > peers["salary"].median() else "Below median"
+    }
+
+print("\n6. Sample peer comparison report:")
+report = peer_report(df, "E005")
+for k, v in report.items():
+    print(f"  {k}: {v}")
+```
+:::
+:::
+
+## Summary
+
+You've learned key compensation analysis techniques:
+
+- **Percentile ranks**: Where an employee falls in the distribution
+- **Peer comparisons**: Comparing to others in the same job classification
+- **Outlier detection**: Identifying unusual salaries using IQR method
+- **Equity analysis**: Looking for unexplained gaps between groups
+- **Distribution analysis**: Understanding salary spread and skewness
+
+Key insights:
+- Always compare salaries within appropriate peer groups
+- Use percentiles rather than raw values for fair comparisons
+- Look for systematic patterns that might indicate equity issues
+
+## Next Steps
+
+Continue to [Lesson 11: Workforce Analytics: Headcount and FTE](11-workforce-analytics.qmd) to learn about staffing analysis and trends.

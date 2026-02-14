@@ -1,0 +1,633 @@
+---
+title: "Inequality Metrics"
+subtitle: "Lesson 19"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Calculate and interpret the Gini coefficient for salary distributions
+- Plot and interpret Lorenz curves
+- Compute percentile ratios (90/10, 90/50, 50/10)
+- Apply the Theil index for decomposable inequality measurement
+- Track inequality trends over time and across divisions
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Why Measure Inequality?
+
+Averages and medians hide important information. Two divisions with the same median salary can have very different distributions. Inequality metrics quantify *how* salaries are spread, revealing:
+
+- Whether gains are concentrated at the top
+- Whether salary structures are becoming more or less equitable
+- How much of total inequality comes from between-group vs within-group differences
+:::
+
+::: {.concept-box}
+#### Structural Inequality in Public Higher Education
+
+Inequality metrics aren't just academic exercises — they connect to real institutional policy debates in Wisconsin and nationally:
+
+**Wisconsin-specific context**: After Act 10 (2011), UW faculty and staff lost collective bargaining rights. Combined with years of pay plan freezes and minimal across-the-board increases, salary compression and inequality have grown measurably. When the state provides a 2% pay plan but market rates in STEM and health sciences grow 4-5%, inequality between divisions widens mechanically.
+
+**Why this matters institutionally**:
+
+- A rising Gini coefficient signals that salary gains are concentrating among a few — typically medical faculty, named chairs, and market-adjusted STEM positions — while the majority falls behind.
+- **Theil decomposition** is particularly powerful because it separates between-division inequality from within-division inequality. If most inequality is *between* divisions (Medicine vs. Education), the policy lever is differential raise pools. If it's *within* divisions, the issue is internal equity — promotions, starting salary variation, or merit distribution practices.
+- Boards of Regents and legislators increasingly ask for equity metrics. Having Gini trends and Theil decompositions ready transforms you from a data reporter into a policy analyst.
+
+These metrics also connect to the legal frameworks discussed in Lesson 10: if Theil decomposition reveals that inequality *between* gender groups is growing while *within* groups is stable, that's a compliance red flag worth investigating with the statistical tools in Lesson 21.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Generate realistic salary data
+np.random.seed(42)
+
+divisions = {
+    "L&S": {"n": 800, "mean": 82000, "std": 25000, "skew": 1.2},
+    "Medicine": {"n": 600, "mean": 115000, "std": 45000, "skew": 1.5},
+    "Engineering": {"n": 400, "mean": 95000, "std": 30000, "skew": 1.1},
+    "Business": {"n": 200, "mean": 105000, "std": 40000, "skew": 1.4},
+    "Education": {"n": 300, "mean": 72000, "std": 18000, "skew": 0.8}
+}
+
+records = []
+for div, params in divisions.items():
+    # Log-normal distribution creates realistic right-skew
+    log_mean = np.log(params["mean"]) - 0.5 * (params["std"] / params["mean"]) ** 2
+    log_std = params["std"] / params["mean"]
+    salaries = np.random.lognormal(log_mean, log_std, params["n"])
+    salaries = np.clip(salaries, 30000, 500000)  # Reasonable bounds
+
+    for sal in salaries:
+        records.append({"division": div, "salary": round(sal, 0)})
+
+df = pd.DataFrame(records)
+print(f"Total employees: {len(df)}")
+print(f"\nSalary summary:")
+print(df.groupby("division")["salary"].describe()[["count", "mean", "50%", "min", "max"]].round(0))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# R has the ineq package
+library(ineq)
+gini_value <- ineq(salaries, type = "Gini")
+plot(Lc(salaries))  # Lorenz curve
+```
+:::
+
+## The Gini Coefficient
+
+The Gini coefficient is the most widely used inequality measure. It ranges from 0 (perfect equality) to 1 (perfect inequality).
+
+::: {.concept-box}
+#### Interpreting Gini Values
+
+| Gini Range | Interpretation | Example |
+|------------|---------------|---------|
+| 0.00-0.10 | Very equal | Unionized hourly workers |
+| 0.10-0.20 | Low inequality | Single job classification |
+| 0.20-0.35 | Moderate inequality | Typical university division |
+| 0.35-0.50 | High inequality | Entire university |
+| 0.50+ | Very high inequality | Entire national income |
+:::
+
+### Calculating the Gini Coefficient
+
+```{python}
+def gini_coefficient(values):
+    """Calculate the Gini coefficient for a set of values.
+
+    Uses the relative mean absolute difference formula:
+    G = (2 * sum(i * y_i)) / (n * sum(y_i)) - (n + 1) / n
+
+    Args:
+        values: Array-like of non-negative values
+
+    Returns:
+        Gini coefficient between 0 and 1
+    """
+    values = np.array(values, dtype=float)
+    values = values[values > 0]  # Remove zeros
+
+    if len(values) == 0:
+        return 0.0
+
+    sorted_values = np.sort(values)
+    n = len(sorted_values)
+    index = np.arange(1, n + 1)
+
+    return (2 * np.sum(index * sorted_values)) / (n * np.sum(sorted_values)) - (n + 1) / n
+
+# Calculate for each division
+gini_by_div = df.groupby("division")["salary"].apply(gini_coefficient).sort_values()
+
+print("Gini Coefficient by Division:")
+print("=" * 40)
+for div, gini in gini_by_div.items():
+    print(f"  {div:15s}: {gini:.4f}")
+
+print(f"\n  {'University-wide':15s}: {gini_coefficient(df['salary']):.4f}")
+```
+
+### Visualizing Gini by Division
+
+```{python}
+gini_df = gini_by_div.reset_index()
+gini_df.columns = ["division", "gini"]
+
+fig = px.bar(
+    gini_df.sort_values("gini"),
+    x="gini",
+    y="division",
+    orientation="h",
+    title="Salary Inequality by Division (Gini Coefficient)",
+    labels={"gini": "Gini Coefficient", "division": "Division"},
+    color="gini",
+    color_continuous_scale="RdYlGn_r"  # Red = more inequality
+)
+
+fig.update_layout(
+    xaxis_range=[0, 0.5],
+    showlegend=False
+)
+
+# Add reference line for university-wide
+overall_gini = gini_coefficient(df["salary"])
+fig.add_vline(x=overall_gini, line_dash="dash", line_color="gray",
+              annotation_text=f"University-wide: {overall_gini:.3f}")
+
+fig.show()
+```
+
+## Lorenz Curves
+
+The Lorenz curve visually represents inequality. It plots the cumulative share of population against the cumulative share of income/salary.
+
+```{python}
+def lorenz_curve(values):
+    """Calculate Lorenz curve coordinates.
+
+    Args:
+        values: Array-like of non-negative values
+
+    Returns:
+        Tuple of (cumulative population share, cumulative salary share)
+    """
+    sorted_values = np.sort(values)
+    n = len(sorted_values)
+
+    # Cumulative shares
+    cum_population = np.arange(1, n + 1) / n
+    cum_salary = np.cumsum(sorted_values) / np.sum(sorted_values)
+
+    # Add origin point
+    cum_population = np.insert(cum_population, 0, 0)
+    cum_salary = np.insert(cum_salary, 0, 0)
+
+    return cum_population, cum_salary
+```
+
+### Plotting Lorenz Curves
+
+```{python}
+fig = go.Figure()
+
+# Perfect equality line
+fig.add_trace(go.Scatter(
+    x=[0, 1], y=[0, 1],
+    mode="lines",
+    line=dict(color="black", dash="dash"),
+    name="Perfect Equality"
+))
+
+# Lorenz curve for each division
+colors = ["#E69F00", "#56B4E9", "#009E73", "#D55E00", "#CC79A7"]
+for i, div in enumerate(sorted(divisions.keys())):
+    div_salaries = df[df["division"] == div]["salary"].values
+    pop_share, sal_share = lorenz_curve(div_salaries)
+    gini = gini_coefficient(div_salaries)
+
+    fig.add_trace(go.Scatter(
+        x=pop_share,
+        y=sal_share,
+        mode="lines",
+        name=f"{div} (Gini={gini:.3f})",
+        line=dict(color=colors[i], width=2)
+    ))
+
+fig.update_layout(
+    title="Lorenz Curves by Division",
+    xaxis_title="Cumulative Share of Employees",
+    yaxis_title="Cumulative Share of Total Salary",
+    xaxis=dict(range=[0, 1]),
+    yaxis=dict(range=[0, 1]),
+    height=500,
+    legend=dict(x=0.05, y=0.95)
+)
+
+fig.show()
+```
+
+### Reading the Lorenz Curve
+
+The further the curve bows from the diagonal, the greater the inequality. The Gini coefficient equals twice the area between the Lorenz curve and the line of perfect equality.
+
+```{python}
+# Quantify what the Lorenz curve tells us
+div_salaries = df[df["division"] == "Medicine"]["salary"].values
+sorted_sals = np.sort(div_salaries)
+n = len(sorted_sals)
+
+# What share of total salary goes to the bottom 50%?
+bottom_50_share = np.sum(sorted_sals[:n//2]) / np.sum(sorted_sals) * 100
+
+# What share goes to the top 10%?
+top_10_share = np.sum(sorted_sals[int(n*0.9):]) / np.sum(sorted_sals) * 100
+
+print("Medicine Division Salary Distribution:")
+print(f"  Bottom 50% of earners receive: {bottom_50_share:.1f}% of total salary")
+print(f"  Top 10% of earners receive:    {top_10_share:.1f}% of total salary")
+```
+
+## Percentile Ratios
+
+Percentile ratios are simpler to compute and interpret than the Gini.
+
+```{python}
+def percentile_ratios(values):
+    """Calculate common percentile ratios.
+
+    Returns:
+        Dictionary with ratio names and values
+    """
+    p10 = np.percentile(values, 10)
+    p25 = np.percentile(values, 25)
+    p50 = np.percentile(values, 50)
+    p75 = np.percentile(values, 75)
+    p90 = np.percentile(values, 90)
+
+    return {
+        "p10": p10,
+        "p25": p25,
+        "p50": p50,
+        "p75": p75,
+        "p90": p90,
+        "90/10": p90 / p10,     # Overall spread
+        "90/50": p90 / p50,     # Upper tail inequality
+        "50/10": p50 / p10,     # Lower tail inequality
+        "75/25": p75 / p25,     # Interquartile ratio
+    }
+
+# Calculate for each division
+ratio_rows = []
+for div in sorted(divisions.keys()):
+    ratios = percentile_ratios(df[df["division"] == div]["salary"])
+    ratios["division"] = div
+    ratio_rows.append(ratios)
+
+ratio_df = pd.DataFrame(ratio_rows).set_index("division")
+
+print("Percentile Ratios by Division:")
+print(ratio_df[["90/10", "90/50", "50/10", "75/25"]].round(2))
+```
+
+::: {.concept-box}
+#### Interpreting Percentile Ratios
+
+- **90/10 ratio**: How many times more does the 90th percentile earn than the 10th? Values above 3.0 indicate substantial spread.
+- **90/50 ratio**: How much does the top pull away from the middle? Values above 1.8 suggest a long upper tail.
+- **50/10 ratio**: How compressed is the bottom half? Values near 1.0 indicate a floor effect (minimum salary policies).
+- **75/25 ratio**: The interquartile spread. Less sensitive to extremes than 90/10.
+:::
+
+### Visualizing Percentile Ratios
+
+```{python}
+fig = px.bar(
+    ratio_df.reset_index().melt(
+        id_vars="division",
+        value_vars=["90/10", "90/50", "50/10"],
+        var_name="ratio",
+        value_name="value"
+    ),
+    x="division",
+    y="value",
+    color="ratio",
+    barmode="group",
+    title="Percentile Ratios by Division",
+    labels={"value": "Ratio", "division": "Division"}
+)
+
+fig.update_layout(legend_title="Ratio Type")
+fig.show()
+```
+
+## The Theil Index
+
+The Theil index has a crucial advantage: it is **decomposable**. You can separate total inequality into between-group and within-group components.
+
+::: {.concept-box}
+#### Why Decomposability Matters
+
+If the university Gini is 0.35, is that because:
+
+- **Divisions pay very differently** (between-group inequality), or
+- **There's huge spread within each division** (within-group inequality)?
+
+The Theil index answers this directly.
+:::
+
+```{python}
+def theil_index(values):
+    """Calculate the Theil T index (GE(1)).
+
+    T = (1/n) * sum( (y_i / y_bar) * ln(y_i / y_bar) )
+
+    Args:
+        values: Array-like of positive values
+
+    Returns:
+        Theil T index (0 = perfect equality)
+    """
+    values = np.array(values, dtype=float)
+    values = values[values > 0]
+    n = len(values)
+    mean_val = np.mean(values)
+
+    ratios = values / mean_val
+    return np.mean(ratios * np.log(ratios))
+
+
+def theil_decomposition(df, salary_col, group_col):
+    """Decompose Theil index into between-group and within-group components.
+
+    Args:
+        df: DataFrame with salary and group columns
+        salary_col: Name of salary column
+        group_col: Name of grouping column
+
+    Returns:
+        Dictionary with total, between, within, and share values
+    """
+    overall_mean = df[salary_col].mean()
+    overall_theil = theil_index(df[salary_col])
+    n_total = len(df)
+
+    # Between-group component
+    between = 0
+    within = 0
+
+    for group, group_df in df.groupby(group_col):
+        n_g = len(group_df)
+        mean_g = group_df[salary_col].mean()
+        share_g = n_g / n_total  # Population share
+        income_share_g = (n_g * mean_g) / (n_total * overall_mean)
+
+        # Between: contribution from group mean differing from overall mean
+        if mean_g > 0 and overall_mean > 0:
+            between += income_share_g * np.log(mean_g / overall_mean)
+
+        # Within: weighted group Theil
+        within += income_share_g * theil_index(group_df[salary_col])
+
+    return {
+        "total": overall_theil,
+        "between": between,
+        "within": within,
+        "between_share": between / overall_theil * 100 if overall_theil > 0 else 0,
+        "within_share": within / overall_theil * 100 if overall_theil > 0 else 0
+    }
+```
+
+### Applying the Decomposition
+
+```{python}
+decomp = theil_decomposition(df, "salary", "division")
+
+print("Theil Index Decomposition:")
+print("=" * 50)
+print(f"  Total inequality:     {decomp['total']:.4f}")
+print(f"  Between divisions:    {decomp['between']:.4f} ({decomp['between_share']:.1f}%)")
+print(f"  Within divisions:     {decomp['within']:.4f} ({decomp['within_share']:.1f}%)")
+print()
+print("Interpretation:")
+if decomp["between_share"] > 50:
+    print("  Most inequality comes from BETWEEN divisions")
+    print("  (divisions have very different pay levels)")
+else:
+    print("  Most inequality comes from WITHIN divisions")
+    print("  (large salary spread within each division)")
+```
+
+### Visualizing the Decomposition
+
+```{python}
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=["Between Divisions", "Within Divisions"],
+    y=[decomp["between"], decomp["within"]],
+    text=[f"{decomp['between_share']:.1f}%", f"{decomp['within_share']:.1f}%"],
+    textposition="auto",
+    marker_color=["#E69F00", "#56B4E9"]
+))
+
+fig.update_layout(
+    title=f"Theil Index Decomposition (Total = {decomp['total']:.4f})",
+    yaxis_title="Theil Index Component",
+    showlegend=False
+)
+
+fig.show()
+```
+
+## Tracking Inequality Over Time
+
+```{python}
+# Simulate salary data across multiple years with increasing inequality
+np.random.seed(42)
+years = range(2021, 2026)
+
+yearly_data = []
+for year in years:
+    # Top earners get bigger raises over time
+    growth_factor = 1 + (year - 2021) * 0.03  # 3% base growth per year
+    top_growth = 1 + (year - 2021) * 0.05     # Top earners grow faster
+
+    for div, params in divisions.items():
+        log_mean = np.log(params["mean"]) - 0.5 * (params["std"] / params["mean"]) ** 2
+        log_std = params["std"] / params["mean"]
+        salaries = np.random.lognormal(log_mean, log_std, params["n"])
+
+        # Apply differential growth
+        median_sal = np.median(salaries)
+        salaries = np.where(
+            salaries > median_sal,
+            salaries * top_growth,    # Above-median: faster growth
+            salaries * growth_factor  # Below-median: base growth
+        )
+        salaries = np.clip(salaries, 30000, 600000)
+
+        for sal in salaries:
+            yearly_data.append({
+                "year": year,
+                "division": div,
+                "salary": round(sal, 0)
+            })
+
+yearly_df = pd.DataFrame(yearly_data)
+```
+
+```{python}
+# Calculate metrics over time
+trend_data = []
+for year in years:
+    year_df = yearly_df[yearly_df["year"] == year]
+
+    trend_data.append({
+        "year": year,
+        "gini": gini_coefficient(year_df["salary"]),
+        "theil": theil_index(year_df["salary"]),
+        "p90_p10": np.percentile(year_df["salary"], 90) / np.percentile(year_df["salary"], 10),
+        "p90_p50": np.percentile(year_df["salary"], 90) / np.percentile(year_df["salary"], 50)
+    })
+
+trend_df = pd.DataFrame(trend_data)
+
+fig = make_subplots(rows=1, cols=2, subplot_titles=("Gini Coefficient", "90/10 Ratio"))
+
+fig.add_trace(
+    go.Scatter(x=trend_df["year"], y=trend_df["gini"],
+               mode="lines+markers", name="Gini",
+               line=dict(color="#E69F00", width=3)),
+    row=1, col=1
+)
+
+fig.add_trace(
+    go.Scatter(x=trend_df["year"], y=trend_df["p90_p10"],
+               mode="lines+markers", name="90/10",
+               line=dict(color="#56B4E9", width=3)),
+    row=1, col=2
+)
+
+fig.update_layout(title="Inequality Trends Over Time", height=400, showlegend=False)
+fig.show()
+```
+
+```{python}
+print("Inequality Trend Summary:")
+print(trend_df.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 19: Inequality Analysis
+
+Using the `yearly_df` dataset:
+
+1. Calculate the Gini coefficient for each division in each year
+2. Plot Lorenz curves for 2021 vs 2025 for a single division
+3. Perform a Theil decomposition for each year and plot how the between/within shares change
+4. Which division saw the largest increase in inequality?
+5. Calculate what share of total salary the top 5% earn in each year
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Gini by division and year
+gini_trend = yearly_df.groupby(["year", "division"])["salary"].apply(gini_coefficient).reset_index()
+gini_trend.columns = ["year", "division", "gini"]
+
+fig = px.line(gini_trend, x="year", y="gini", color="division",
+              title="Gini Coefficient by Division Over Time",
+              markers=True)
+fig.update_layout(yaxis_title="Gini Coefficient")
+fig.show()
+
+# 2. Lorenz curves: 2021 vs 2025 for Medicine
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines",
+              line=dict(dash="dash", color="black"), name="Equality"))
+
+for year, color in [(2021, "#56B4E9"), (2025, "#D55E00")]:
+    sals = yearly_df[(yearly_df["year"] == year) & (yearly_df["division"] == "Medicine")]["salary"]
+    pop, sal = lorenz_curve(sals)
+    g = gini_coefficient(sals)
+    fig.add_trace(go.Scatter(x=pop, y=sal, mode="lines",
+                  name=f"{year} (Gini={g:.3f})", line=dict(color=color, width=2)))
+
+fig.update_layout(title="Medicine: Lorenz Curve 2021 vs 2025",
+                  xaxis_title="Cumulative Population Share",
+                  yaxis_title="Cumulative Salary Share")
+fig.show()
+
+# 3. Theil decomposition over time
+theil_trends = []
+for year in years:
+    year_df = yearly_df[yearly_df["year"] == year]
+    decomp = theil_decomposition(year_df, "salary", "division")
+    decomp["year"] = year
+    theil_trends.append(decomp)
+
+theil_trend_df = pd.DataFrame(theil_trends)
+
+fig = go.Figure()
+fig.add_trace(go.Bar(x=theil_trend_df["year"], y=theil_trend_df["between"],
+              name="Between Divisions", marker_color="#E69F00"))
+fig.add_trace(go.Bar(x=theil_trend_df["year"], y=theil_trend_df["within"],
+              name="Within Divisions", marker_color="#56B4E9"))
+fig.update_layout(barmode="stack", title="Theil Decomposition Over Time",
+                  yaxis_title="Theil Index")
+fig.show()
+
+# 4. Largest increase in inequality
+gini_change = gini_trend.pivot(index="division", columns="year", values="gini")
+gini_change["change"] = gini_change[2025] - gini_change[2021]
+print("4. Gini change by division (2021-2025):")
+print(gini_change["change"].sort_values(ascending=False))
+
+# 5. Top 5% salary share over time
+for year in years:
+    sals = yearly_df[yearly_df["year"] == year]["salary"].values
+    sorted_sals = np.sort(sals)
+    n = len(sorted_sals)
+    top_5_share = np.sum(sorted_sals[int(n*0.95):]) / np.sum(sorted_sals) * 100
+    print(f"  {year}: Top 5% earn {top_5_share:.1f}% of total salary")
+```
+:::
+:::
+
+## Summary
+
+You've learned to measure and analyze salary inequality:
+
+- **Gini Coefficient**: Single number summarizing overall inequality (0-1)
+- **Lorenz Curves**: Visual representation of how salary is distributed
+- **Percentile Ratios**: Targeted measures of spread at different points
+- **Theil Index**: Decomposable measure separating between-group and within-group inequality
+- **Trend Analysis**: Tracking how inequality changes over time
+
+Key insights:
+- No single metric tells the whole story - use multiple measures
+- Decomposition reveals *where* inequality comes from
+- Percentile ratios are easiest to explain to non-technical stakeholders
+- Lorenz curves make inequality visually intuitive
+
+## Next Steps
+
+Continue to [Lesson 20: Salary Compression Analysis](20-salary-compression.qmd) to examine how salary ranges compress within job classifications.

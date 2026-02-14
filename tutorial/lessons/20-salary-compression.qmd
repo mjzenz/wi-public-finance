@@ -1,0 +1,515 @@
+---
+title: "Salary Compression Analysis"
+subtitle: "Lesson 20"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Define and calculate salary compression metrics
+- Compute compa-ratios (actual salary vs range midpoint)
+- Identify where new hires earn close to or above senior staff
+- Analyze compression across job families and divisions
+- Visualize salary range utilization
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### What is Salary Compression?
+
+**Salary compression** occurs when there is little difference in pay between employees regardless of experience, skills, or seniority. Common causes:
+
+- **Market-driven compression**: New hires command higher starting salaries due to market demand, closing the gap with long-tenured staff
+- **Minimum salary increases**: Across-the-board raises that disproportionately lift the bottom
+- **Inversion**: When new hires actually earn more than experienced employees in the same role
+
+Compression erodes the reward for experience and loyalty, increasing turnover risk among senior staff.
+:::
+
+::: {.concept-box}
+#### Wisconsin Public-Sector Compensation Context
+
+Salary compression at UW is not accidental — it's a predictable consequence of how public-sector compensation works in Wisconsin:
+
+**Pay plan history**: The state legislature sets the "pay plan" — the authorized percentage increase for state employees in each biennium. From 2011 to 2021, these increases were minimal (often 0-2%), while the private sector and peer institutions offered 3-5%. The result: new hires needed market-rate offers to accept positions, but incumbents received only the modest pay plan increase. Over a decade, this compresses salary ranges dramatically.
+
+**Available tools for addressing compression**:
+
+- **Across-the-board (ATB) raises**: Equal percentage increases for all. These maintain the status quo — they don't fix compression because 3% of $80K ($2,400) is less than 3% of $120K ($3,600), meaning dollar gaps persist and ratios stay compressed.
+- **Merit raises**: Differentiated based on performance. Can help if directed toward compressed positions, but politically difficult and requires robust evaluation systems.
+- **Market/equity adjustments**: Targeted increases to bring specific positions to competitive levels. The most effective tool for compression, but requires justification and data — exactly what this lesson teaches you to produce.
+- **Title changes**: Reclassifying positions to higher salary ranges. Common in academic staff and university staff, but not available for ranked faculty.
+- **Retention offers**: Reactive adjustments when an employee has an outside offer. Effective but expensive (disrupts internal equity) and only helps those with external opportunities.
+
+When you calculate compa-ratios and identify inversion, you're building the evidence base that HR and the Provost's office need to justify targeted market adjustments in their budget requests.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Generate salary data with compression characteristics
+np.random.seed(42)
+
+job_families = {
+    "Assistant Professor": {"min": 75000, "mid": 95000, "max": 115000, "n": 200},
+    "Associate Professor": {"min": 85000, "mid": 110000, "max": 135000, "n": 150},
+    "Full Professor": {"min": 100000, "mid": 140000, "max": 180000, "n": 120},
+    "Research Scientist": {"min": 55000, "mid": 72000, "max": 89000, "n": 180},
+    "Academic Staff": {"min": 45000, "mid": 60000, "max": 75000, "n": 250},
+    "IT Professional": {"min": 60000, "mid": 80000, "max": 100000, "n": 100},
+}
+
+records = []
+for title, params in job_families.items():
+    for i in range(params["n"]):
+        years_service = np.random.exponential(8)
+        years_service = min(years_service, 35)
+
+        # Base salary with some compression:
+        # New hires cluster near midpoint, senior staff don't go much higher
+        base = params["min"] + (params["mid"] - params["min"]) * min(years_service / 5, 1.0)
+        noise = np.random.normal(0, (params["max"] - params["min"]) * 0.08)
+        salary = base + noise
+
+        # Some market-driven new hires come in high
+        if years_service < 2 and np.random.random() < 0.3:
+            salary = params["mid"] + np.random.uniform(0, (params["max"] - params["mid"]) * 0.3)
+
+        salary = np.clip(salary, params["min"] * 0.95, params["max"] * 1.05)
+
+        records.append({
+            "title": title,
+            "salary": round(salary, 0),
+            "years_service": round(years_service, 1),
+            "range_min": params["min"],
+            "range_mid": params["mid"],
+            "range_max": params["max"]
+        })
+
+df = pd.DataFrame(records)
+print(f"Employees: {len(df)}")
+print(df.groupby("title")["salary"].describe()[["count", "mean", "min", "max"]].round(0))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# Compa-ratio in R
+library(dplyr)
+df <- df %>%
+  mutate(
+    compa_ratio = salary / range_mid,
+    range_position = (salary - range_min) / (range_max - range_min)
+  )
+```
+:::
+
+## Compa-Ratios
+
+The **compa-ratio** (comparative ratio) measures where an employee's salary falls relative to the midpoint of their pay range.
+
+```{python}
+def calculate_compa_ratio(salary, range_midpoint):
+    """Calculate compa-ratio.
+
+    Compa-ratio = Actual Salary / Range Midpoint
+
+    Interpretation:
+        < 0.80: Significantly below midpoint
+        0.80-0.90: Below midpoint
+        0.90-1.10: At midpoint (target zone)
+        1.10-1.20: Above midpoint
+        > 1.20: Significantly above midpoint
+    """
+    return salary / range_midpoint
+
+df["compa_ratio"] = calculate_compa_ratio(df["salary"], df["range_mid"])
+
+print("Compa-Ratio Summary by Title:")
+print(df.groupby("title")["compa_ratio"].describe()[["mean", "std", "min", "max"]].round(3))
+```
+
+### Compa-Ratio Distribution
+
+```{python}
+fig = px.box(
+    df,
+    x="title",
+    y="compa_ratio",
+    title="Compa-Ratio Distribution by Job Title",
+    labels={"compa_ratio": "Compa-Ratio", "title": "Job Title"},
+    color="title"
+)
+
+# Add target zone
+fig.add_hline(y=1.0, line_dash="solid", line_color="black", line_width=1)
+fig.add_hline(y=0.9, line_dash="dot", line_color="gray",
+              annotation_text="Target Zone", annotation_position="top left")
+fig.add_hline(y=1.1, line_dash="dot", line_color="gray")
+
+fig.update_layout(showlegend=False, xaxis_tickangle=-30)
+fig.show()
+```
+
+## Range Position (Range Penetration)
+
+While compa-ratio measures distance from midpoint, **range position** measures where someone falls within the full range.
+
+```{python}
+def range_position(salary, range_min, range_max):
+    """Calculate range position (0-1 scale).
+
+    0.0 = at minimum
+    0.5 = at midpoint
+    1.0 = at maximum
+    """
+    if range_max == range_min:
+        return 0.5
+    return (salary - range_min) / (range_max - range_min)
+
+df["range_position"] = df.apply(
+    lambda row: range_position(row["salary"], row["range_min"], row["range_max"]),
+    axis=1
+)
+
+# Summary
+print("Range Position Summary:")
+print(df.groupby("title")["range_position"].describe()[["mean", "25%", "50%", "75%"]].round(3))
+```
+
+### Range Position by Seniority
+
+```{python}
+# Create seniority buckets
+df["seniority"] = pd.cut(
+    df["years_service"],
+    bins=[0, 2, 5, 10, 20, 40],
+    labels=["0-2 yrs", "2-5 yrs", "5-10 yrs", "10-20 yrs", "20+ yrs"]
+)
+
+fig = px.box(
+    df,
+    x="seniority",
+    y="range_position",
+    color="seniority",
+    title="Range Position by Years of Service",
+    labels={"range_position": "Range Position", "seniority": "Years of Service"}
+)
+
+fig.add_hline(y=0.5, line_dash="dash", line_color="black",
+              annotation_text="Midpoint")
+
+fig.update_layout(showlegend=False)
+fig.show()
+```
+
+## Detecting Compression
+
+### Compression Ratio
+
+The **compression ratio** compares salaries of new hires to senior employees.
+
+```{python}
+def compression_ratio(df, salary_col, seniority_col, junior_max=2, senior_min=10):
+    """Calculate compression ratio.
+
+    Compression Ratio = Median Junior Salary / Median Senior Salary
+
+    Values close to 1.0 indicate severe compression.
+    """
+    junior = df[df[seniority_col] <= junior_max][salary_col].median()
+    senior = df[df[seniority_col] >= senior_min][salary_col].median()
+
+    return junior / senior if senior > 0 else None
+
+# Calculate by job title
+compression_data = []
+for title in job_families:
+    title_df = df[df["title"] == title]
+    cr = compression_ratio(title_df, "salary", "years_service")
+
+    junior_med = title_df[title_df["years_service"] <= 2]["salary"].median()
+    senior_med = title_df[title_df["years_service"] >= 10]["salary"].median()
+
+    compression_data.append({
+        "title": title,
+        "compression_ratio": cr,
+        "junior_median": junior_med,
+        "senior_median": senior_med,
+        "gap": senior_med - junior_med
+    })
+
+comp_df = pd.DataFrame(compression_data).sort_values("compression_ratio", ascending=False)
+
+print("Compression Analysis:")
+print("=" * 70)
+for _, row in comp_df.iterrows():
+    status = "SEVERE" if row["compression_ratio"] > 0.95 else \
+             "HIGH" if row["compression_ratio"] > 0.90 else \
+             "MODERATE" if row["compression_ratio"] > 0.85 else "LOW"
+    print(f"  {row['title']:22s} CR={row['compression_ratio']:.3f}  "
+          f"Gap=${row['gap']:,.0f}  [{status}]")
+```
+
+### Visualizing Compression
+
+```{python}
+fig = px.scatter(
+    df,
+    x="years_service",
+    y="salary",
+    color="title",
+    title="Salary vs Years of Service (Compression Visible)",
+    labels={"years_service": "Years of Service", "salary": "Salary ($)"},
+    opacity=0.5,
+    trendline="lowess"
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+### Salary-Seniority Slope
+
+A flat slope indicates compression - seniority doesn't pay off.
+
+```{python}
+from numpy.polynomial import polynomial as P
+
+slope_data = []
+for title in job_families:
+    title_df = df[df["title"] == title]
+    x = title_df["years_service"].values
+    y = title_df["salary"].values
+
+    # Linear fit
+    coeffs = np.polyfit(x, y, 1)
+    slope = coeffs[0]  # Dollars per year of service
+
+    slope_data.append({
+        "title": title,
+        "slope_per_year": slope,
+        "midpoint": job_families[title]["mid"],
+        "slope_pct": slope / job_families[title]["mid"] * 100
+    })
+
+slope_df = pd.DataFrame(slope_data).sort_values("slope_pct")
+
+fig = px.bar(
+    slope_df,
+    x="slope_pct",
+    y="title",
+    orientation="h",
+    title="Salary Growth per Year of Service (% of Midpoint)",
+    labels={"slope_pct": "Annual Growth (% of midpoint)", "title": "Job Title"},
+    color="slope_pct",
+    color_continuous_scale="RdYlGn"
+)
+
+fig.update_layout(showlegend=False)
+fig.show()
+
+print("\nSalary-Seniority Slopes:")
+for _, row in slope_df.iterrows():
+    print(f"  {row['title']:22s}: ${row['slope_per_year']:,.0f}/year "
+          f"({row['slope_pct']:.2f}% of midpoint)")
+```
+
+## Inversion Analysis
+
+**Salary inversion** occurs when newer employees earn more than their senior counterparts.
+
+```{python}
+def find_inversions(df, title, salary_col="salary", seniority_col="years_service"):
+    """Find cases where junior employees earn more than senior ones."""
+    title_df = df[df["title"] == title].copy()
+
+    junior = title_df[title_df[seniority_col] <= 3]
+    senior = title_df[title_df[seniority_col] >= 10]
+
+    if len(junior) == 0 or len(senior) == 0:
+        return 0, 0
+
+    # How many juniors earn above the senior median?
+    senior_median = senior[salary_col].median()
+    inversions = (junior[salary_col] > senior_median).sum()
+    inversion_rate = inversions / len(junior) * 100
+
+    return inversions, inversion_rate
+
+print("Inversion Analysis (junior employees earning above senior median):")
+print("=" * 60)
+for title in job_families:
+    count, rate = find_inversions(df, title)
+    flag = " ⚠" if rate > 20 else ""
+    print(f"  {title:22s}: {count:3d} inversions ({rate:.1f}%){flag}")
+```
+
+## Range Spread Analysis
+
+```{python}
+def range_spread(range_min, range_max):
+    """Calculate range spread percentage.
+
+    Range Spread = (Max - Min) / Min * 100
+    """
+    return (range_max - range_min) / range_min * 100
+
+# Analyze range utilization
+range_analysis = []
+for title, params in job_families.items():
+    title_df = df[df["title"] == title]
+    spread = range_spread(params["min"], params["max"])
+
+    # What percentage of employees are in each third?
+    third_1 = params["min"] + (params["max"] - params["min"]) / 3
+    third_2 = params["min"] + 2 * (params["max"] - params["min"]) / 3
+
+    in_lower = (title_df["salary"] < third_1).mean() * 100
+    in_middle = ((title_df["salary"] >= third_1) & (title_df["salary"] < third_2)).mean() * 100
+    in_upper = (title_df["salary"] >= third_2).mean() * 100
+
+    range_analysis.append({
+        "title": title,
+        "range_spread": spread,
+        "lower_third": in_lower,
+        "middle_third": in_middle,
+        "upper_third": in_upper
+    })
+
+range_df = pd.DataFrame(range_analysis)
+
+print("Range Utilization (% of employees in each third of range):")
+print(range_df.to_string(index=False, float_format=lambda x: f"{x:.1f}"))
+```
+
+```{python}
+# Stacked bar chart of range utilization
+fig = go.Figure()
+
+for third, color, label in [
+    ("lower_third", "#D55E00", "Lower Third"),
+    ("middle_third", "#E69F00", "Middle Third"),
+    ("upper_third", "#009E73", "Upper Third")
+]:
+    fig.add_trace(go.Bar(
+        x=range_df["title"],
+        y=range_df[third],
+        name=label,
+        marker_color=color
+    ))
+
+fig.update_layout(
+    barmode="stack",
+    title="Salary Range Utilization by Job Title",
+    yaxis_title="Percentage of Employees",
+    xaxis_tickangle=-30
+)
+
+fig.show()
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 20: Compression Dashboard
+
+1. Calculate compa-ratios for all employees and identify those below 0.85 or above 1.15
+2. Create a scatter plot of compa-ratio vs years of service, colored by job title
+3. Calculate the compression ratio for each job title and flag those above 0.90
+4. Find the job title with the most salary inversions
+5. Create a summary table showing: title, median compa-ratio, compression ratio, inversion rate, and range position
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Identify outlier compa-ratios
+df["cr_flag"] = pd.cut(
+    df["compa_ratio"],
+    bins=[0, 0.85, 1.15, 999],
+    labels=["Below Range", "On Target", "Above Range"]
+)
+
+print("1. Compa-Ratio Distribution:")
+print(df["cr_flag"].value_counts())
+print(f"\nBelow 0.85: {(df['compa_ratio'] < 0.85).sum()} employees")
+print(f"Above 1.15: {(df['compa_ratio'] > 1.15).sum()} employees")
+
+# 2. Scatter plot
+fig = px.scatter(
+    df, x="years_service", y="compa_ratio", color="title",
+    title="Compa-Ratio vs Seniority",
+    labels={"compa_ratio": "Compa-Ratio", "years_service": "Years of Service"},
+    opacity=0.5
+)
+fig.add_hline(y=1.0, line_dash="dash", line_color="black")
+fig.show()
+
+# 3. Compression ratios
+print("\n3. Compression Ratios:")
+for title in job_families:
+    cr = compression_ratio(df[df["title"] == title], "salary", "years_service")
+    flag = "FLAGGED" if cr and cr > 0.90 else ""
+    print(f"  {title:22s}: {cr:.3f} {flag}")
+
+# 4. Most inversions
+print("\n4. Inversion counts:")
+max_inv_title = None
+max_inv_rate = 0
+for title in job_families:
+    count, rate = find_inversions(df, title)
+    if rate > max_inv_rate:
+        max_inv_rate = rate
+        max_inv_title = title
+    print(f"  {title:22s}: {rate:.1f}%")
+print(f"\n  Highest: {max_inv_title} at {max_inv_rate:.1f}%")
+
+# 5. Summary table
+summary_rows = []
+for title in job_families:
+    title_df = df[df["title"] == title]
+    cr = compression_ratio(title_df, "salary", "years_service")
+    _, inv_rate = find_inversions(df, title)
+
+    summary_rows.append({
+        "Title": title,
+        "Median CR": title_df["compa_ratio"].median(),
+        "Compression": cr,
+        "Inversion %": inv_rate,
+        "Median Range Pos": title_df["range_position"].median()
+    })
+
+summary = pd.DataFrame(summary_rows)
+print("\n5. Summary Table:")
+print(summary.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
+```
+:::
+:::
+
+## Summary
+
+You've learned to analyze salary compression:
+
+- **Compa-Ratio**: Where employees sit relative to range midpoint
+- **Range Position**: Placement within the full salary range
+- **Compression Ratio**: How close junior and senior salaries are
+- **Inversion Detection**: Finding where new hires out-earn veterans
+- **Range Utilization**: How the salary range is actually used
+
+Key takeaways:
+- Compression ratios above 0.90 indicate serious compression
+- Flat salary-seniority slopes mean experience isn't rewarded
+- Range utilization reveals whether salary structures are functional
+- Inversions damage morale and increase senior staff turnover risk
+
+## Next Steps
+
+Continue to [Lesson 21: Statistical Testing for Equity](21-statistical-testing.qmd) to learn how to rigorously test for salary differences across groups.

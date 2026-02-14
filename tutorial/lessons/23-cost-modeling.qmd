@@ -1,0 +1,867 @@
+---
+title: "Cost Modeling and Budget Impact"
+subtitle: "Lesson 23"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Calculate total compensation costs including fringe benefit loading factors
+- Model across-the-board (ATB), merit-based, and targeted equity raise scenarios
+- Estimate workforce-wide cost impacts of each raise strategy
+- Incorporate vacancy savings and turnover costs into budget models
+- Perform sensitivity analysis on key assumptions
+- Build a multi-year budget projection model
+- Visualize cost scenarios using plotly comparison charts
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Why Cost Modeling Matters
+
+Budget analysts need more than descriptive salary statistics. Decision-makers ask questions like:
+
+- "What does a 2% across-the-board raise cost us next year?"
+- "How much do we save from unfilled positions?"
+- "If we shift from ATB raises to targeted equity adjustments, what is the net impact?"
+- "What does our salary budget look like over the next five years under different scenarios?"
+
+Cost modeling translates compensation data into **budget impact projections** that inform real decisions. The key is building models flexible enough to test multiple assumptions quickly.
+:::
+
+::: {.concept-box}
+#### Fund Accounting in Cost Models
+
+A cost model that ignores **fund source** will produce misleading totals. In a public university, not all salary dollars are equal:
+
+**Fund sources and their constraints**:
+
+- **GPR (General Purpose Revenue)**: State-appropriated funds. These are the most constrained — the legislature controls the total, and the pay plan determines allowable raises. A cost model showing "we need $5M for raises" must specify how much comes from GPR vs. other sources.
+- **Tuition/Fee Revenue (PR 131)**: More flexible than GPR but subject to tuition policy. During Wisconsin's tuition freeze (2013-2023), this source was effectively capped.
+- **Federal Grants (Fund 144)**: Salary on grants must comply with OMB Uniform Guidance (2 CFR 200). Raises must be consistent with institutional policy applied uniformly — you can't give a 5% raise to a grant-funded employee if the institutional standard is 2%.
+- **Gift Funds**: Donor intent may restrict how funds are used. An endowed chair might have ample funds for salary, but the gift terms may not allow using it for other positions.
+
+**Fringe benefit rates differ by fund**: This is a critical detail many models miss. At UW, the fringe rate for GPR-funded employees differs from grant-funded employees because federal negotiated rates include different components (e.g., tuition remission for graduate assistants is charged to grants but not GPR). A $100K salary might cost $135K on GPR but $142K on a federal grant.
+
+**Why this matters for your models**: When you model a 3% raise pool, the total cost depends on the fund mix of the affected population. A division that's 80% grant-funded will have different budget implications than one that's 80% GPR-funded. Building fund source into your cost models from the start prevents the "where does the money come from?" question that will inevitably arise when you present to leadership.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Wong color-blind-safe palette
+WONG = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]
+```
+
+## Generating a Realistic Workforce Dataset
+
+We will build a synthetic workforce loosely modeled on a large university division. Each employee has a salary, FTE status, division, and title.
+
+```{python}
+np.random.seed(2024)
+
+divisions = [
+    "College of Letters & Science",
+    "School of Engineering",
+    "School of Business",
+    "School of Education",
+    "Division of Information Technology",
+    "Facilities Planning & Management",
+    "University Health Services",
+]
+
+titles = {
+    "Professor":           {"min": 95000, "max": 200000, "n": 120},
+    "Associate Professor": {"min": 80000, "max": 140000, "n": 150},
+    "Assistant Professor":  {"min": 70000, "max": 110000, "n": 130},
+    "Research Scientist":   {"min": 55000, "max": 95000,  "n": 100},
+    "Academic Staff":       {"min": 42000, "max": 75000,  "n": 200},
+    "Admin Staff":          {"min": 38000, "max": 62000,  "n": 180},
+    "IT Professional":      {"min": 58000, "max": 105000, "n": 70},
+}
+
+records = []
+emp_id = 1000
+
+for title, params in titles.items():
+    for _ in range(params["n"]):
+        salary = np.random.uniform(params["min"], params["max"])
+        fte = np.random.choice([1.0, 0.8, 0.5], p=[0.80, 0.12, 0.08])
+        division = np.random.choice(divisions, p=[0.25, 0.18, 0.15, 0.12, 0.12, 0.10, 0.08])
+        years = np.clip(np.random.exponential(8), 0, 35)
+
+        records.append({
+            "emp_id": emp_id,
+            "title": title,
+            "division": division,
+            "salary": round(salary, 2),
+            "fte": fte,
+            "years_service": round(years, 1),
+        })
+        emp_id += 1
+
+df = pd.DataFrame(records)
+print(f"Workforce size: {len(df)} employees")
+print(f"Total base salary: ${df['salary'].sum():,.0f}")
+print(f"\nBy title:")
+print(df.groupby("title")["salary"].agg(["count", "mean", "sum"]).round(0))
+```
+
+## 1. Total Compensation Cost Calculation
+
+Base salary is only part of what an employer pays. **Fringe benefits** --- health insurance, retirement contributions, FICA, disability, and other benefits --- add a loading factor on top of base pay.
+
+::: {.concept-box}
+#### Fringe Benefit Loading Factors
+
+Typical loading rates for a public university:
+
+| Component | Rate |
+|---|---|
+| FICA (Social Security + Medicare) | 7.65% |
+| Retirement (WRS employer share) | ~6.75% |
+| Health insurance | ~15-20% of salary |
+| Disability, life, other | ~2-3% |
+| **Total fringe rate** | **~32-38%** |
+
+We often model this as a single "fringe rate" multiplied by base salary. The rate may vary by employee category (faculty vs. classified staff).
+:::
+
+```{python}
+# Define fringe rates by category
+fringe_rates = {
+    "Professor": 0.36,
+    "Associate Professor": 0.36,
+    "Assistant Professor": 0.36,
+    "Research Scientist": 0.34,
+    "Academic Staff": 0.34,
+    "Admin Staff": 0.38,
+    "IT Professional": 0.35,
+}
+
+df["fringe_rate"] = df["title"].map(fringe_rates)
+df["fringe_cost"] = df["salary"] * df["fringe_rate"]
+df["total_comp"] = df["salary"] + df["fringe_cost"]
+
+print("Total Compensation Summary")
+print(f"{'':>25} {'Base Salary':>15} {'Fringe':>15} {'Total Comp':>15}")
+print("-" * 72)
+
+for title in titles.keys():
+    subset = df[df["title"] == title]
+    print(f"{title:>25} ${subset['salary'].sum():>13,.0f} ${subset['fringe_cost'].sum():>13,.0f} ${subset['total_comp'].sum():>13,.0f}")
+
+total_base = df["salary"].sum()
+total_fringe = df["fringe_cost"].sum()
+total_comp = df["total_comp"].sum()
+print("-" * 72)
+print(f"{'TOTAL':>25} ${total_base:>13,.0f} ${total_fringe:>13,.0f} ${total_comp:>13,.0f}")
+print(f"\nEffective overall fringe rate: {total_fringe / total_base:.1%}")
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In R you would use `dplyr::mutate()` with a join or `case_when()` to apply fringe rates:
+
+```r
+fringe_lookup <- tibble(
+  title = c("Professor", "Associate Professor", ...),
+  fringe_rate = c(0.36, 0.36, ...)
+)
+
+df <- df %>%
+  left_join(fringe_lookup, by = "title") %>%
+  mutate(
+    fringe_cost = salary * fringe_rate,
+    total_comp = salary + fringe_cost
+  )
+```
+
+The pandas `.map()` method works like a named-vector lookup in R.
+:::
+
+## 2. Raise Scenario Modeling
+
+Budget analysts typically evaluate three kinds of salary increases:
+
+::: {.concept-box}
+#### Raise Strategies
+
+1. **Across-the-Board (ATB)**: Every employee gets the same percentage increase. Simple and transparent, but does not address compression or equity.
+2. **Merit-based**: Raises allocated based on performance ratings. Higher performers get larger increases, but the total pool is the same.
+3. **Targeted equity adjustments**: Raises directed at specific groups --- for example, staff below the market midpoint, or titles with documented compression. More targeted, but harder to communicate.
+:::
+
+```{python}
+def model_atb_raise(df, pct):
+    """Model an across-the-board raise."""
+    result = df.copy()
+    result["raise_amt"] = result["salary"] * pct
+    result["new_salary"] = result["salary"] + result["raise_amt"]
+    result["new_total_comp"] = result["new_salary"] * (1 + result["fringe_rate"])
+    return result
+
+def model_merit_raise(df, pool_pct, performance_weights=None):
+    """Model merit-based raises with a fixed total pool.
+
+    performance_weights: dict mapping performance tier to weight.
+    Employees are randomly assigned to tiers.
+    """
+    if performance_weights is None:
+        performance_weights = {
+            "Exceeds": (0.20, 1.8),   # 20% of employees, 1.8x share
+            "Meets+":  (0.30, 1.2),   # 30%, 1.2x share
+            "Meets":   (0.40, 0.7),   # 40%, 0.7x share
+            "Below":   (0.10, 0.0),   # 10%, no raise
+        }
+
+    result = df.copy()
+    total_pool = result["salary"].sum() * pool_pct
+
+    # Assign performance tiers
+    tiers = []
+    probs = []
+    weights = []
+    for tier, (prob, weight) in performance_weights.items():
+        tiers.append(tier)
+        probs.append(prob)
+        weights.append(weight)
+
+    result["perf_tier"] = np.random.choice(tiers, size=len(result), p=probs)
+    result["perf_weight"] = result["perf_tier"].map(dict(zip(tiers, weights)))
+
+    # Distribute pool proportionally to salary * weight
+    weighted_salary = result["salary"] * result["perf_weight"]
+    result["raise_amt"] = (weighted_salary / weighted_salary.sum()) * total_pool
+    result["new_salary"] = result["salary"] + result["raise_amt"]
+    result["new_total_comp"] = result["new_salary"] * (1 + result["fringe_rate"])
+    return result
+
+def model_equity_raise(df, pool_pct, target_col="title", target_values=None):
+    """Model targeted equity adjustments for specific groups.
+
+    Employees in target_values get raises; others get nothing.
+    Within the target group, lower-paid employees get proportionally more.
+    """
+    result = df.copy()
+    total_pool = result["salary"].sum() * pool_pct
+
+    if target_values is None:
+        target_values = ["Admin Staff", "Academic Staff"]
+
+    is_target = result[target_col].isin(target_values)
+
+    # Weight inversely by salary within the target group (equity-focused)
+    target_salaries = result.loc[is_target, "salary"]
+    inv_weight = 1.0 / target_salaries
+    result["raise_amt"] = 0.0
+    result.loc[is_target, "raise_amt"] = (inv_weight / inv_weight.sum()) * total_pool
+    result["new_salary"] = result["salary"] + result["raise_amt"]
+    result["new_total_comp"] = result["new_salary"] * (1 + result["fringe_rate"])
+    return result
+```
+
+### Comparing the Three Scenarios
+
+```{python}
+np.random.seed(42)
+raise_pct = 0.02  # 2% pool in each scenario
+
+atb = model_atb_raise(df, raise_pct)
+merit = model_merit_raise(df, raise_pct)
+equity = model_equity_raise(df, raise_pct)
+
+scenarios = {"ATB (2%)": atb, "Merit (2% pool)": merit, "Equity Targeted (2% pool)": equity}
+
+print(f"{'Scenario':<25} {'Total Raise $':>15} {'Avg Raise %':>12} {'Total New Comp':>16}")
+print("-" * 70)
+for name, s in scenarios.items():
+    total_raise = s["raise_amt"].sum()
+    avg_pct = (s["raise_amt"] / s["salary"]).mean() * 100
+    new_comp = s["new_total_comp"].sum()
+    print(f"{name:<25} ${total_raise:>13,.0f} {avg_pct:>10.2f}% ${new_comp:>14,.0f}")
+```
+
+```{python}
+# Distribution of raises by title under each scenario
+fig = make_subplots(rows=1, cols=3, subplot_titles=list(scenarios.keys()))
+
+for i, (name, s) in enumerate(scenarios.items(), 1):
+    raise_by_title = s.groupby("title")["raise_amt"].mean().sort_values()
+    fig.add_trace(
+        go.Bar(
+            x=raise_by_title.values,
+            y=raise_by_title.index,
+            orientation="h",
+            marker_color=WONG[i - 1],
+            name=name,
+            showlegend=False,
+        ),
+        row=1,
+        col=i,
+    )
+
+fig.update_layout(
+    title="Average Raise Amount by Title Under Each Scenario",
+    height=400,
+    width=950,
+)
+fig.update_xaxes(title_text="Avg Raise ($)", row=1, col=2)
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In R, you might use `purrr::map()` or `lapply()` to run the same function across scenario parameter lists and bind the results:
+
+```r
+scenarios <- list(
+  "ATB" = model_atb(df, 0.02),
+  "Merit" = model_merit(df, 0.02),
+  "Equity" = model_equity(df, 0.02)
+)
+
+results <- bind_rows(scenarios, .id = "scenario")
+```
+
+The Python pattern of storing DataFrames in a dictionary and iterating with `.items()` is the direct equivalent.
+:::
+
+## 3. Vacancy Savings and Turnover Costs
+
+::: {.concept-box}
+#### Vacancy Savings
+
+When a position is vacant, the employer does not pay the salary or most fringe costs. A position vacant for 3 months saves roughly 25% of its annual total compensation. Budget models often include an assumed **vacancy rate** (e.g., 3-5%) applied across the workforce.
+
+#### Turnover Costs
+
+Conversely, turnover is expensive. Recruitment, onboarding, and lost productivity typically cost **50-200%** of the departing employee's annual salary, depending on the role. For highly specialized positions, costs can be even higher.
+:::
+
+```{python}
+# Assume an average vacancy duration and turnover rate by title
+turnover_params = {
+    "Professor":           {"turnover_rate": 0.03, "vacancy_months": 6, "replacement_cost_pct": 1.5},
+    "Associate Professor": {"turnover_rate": 0.04, "vacancy_months": 5, "replacement_cost_pct": 1.2},
+    "Assistant Professor":  {"turnover_rate": 0.06, "vacancy_months": 4, "replacement_cost_pct": 1.0},
+    "Research Scientist":   {"turnover_rate": 0.08, "vacancy_months": 3, "replacement_cost_pct": 0.8},
+    "Academic Staff":       {"turnover_rate": 0.10, "vacancy_months": 2, "replacement_cost_pct": 0.5},
+    "Admin Staff":          {"turnover_rate": 0.12, "vacancy_months": 2, "replacement_cost_pct": 0.5},
+    "IT Professional":      {"turnover_rate": 0.09, "vacancy_months": 3, "replacement_cost_pct": 1.0},
+}
+
+turnover_df = pd.DataFrame(turnover_params).T.reset_index()
+turnover_df.columns = ["title", "turnover_rate", "vacancy_months", "replacement_cost_pct"]
+
+title_summary = df.groupby("title").agg(
+    headcount=("emp_id", "count"),
+    avg_salary=("salary", "mean"),
+    avg_total_comp=("total_comp", "mean"),
+).reset_index()
+
+turnover_analysis = title_summary.merge(turnover_df, on="title")
+
+# Expected separations per year
+turnover_analysis["expected_separations"] = (
+    turnover_analysis["headcount"] * turnover_analysis["turnover_rate"]
+).round(1)
+
+# Vacancy savings = separations * avg_total_comp * (vacancy_months / 12)
+turnover_analysis["vacancy_savings"] = (
+    turnover_analysis["expected_separations"]
+    * turnover_analysis["avg_total_comp"]
+    * (turnover_analysis["vacancy_months"] / 12)
+)
+
+# Replacement cost = separations * avg_salary * replacement_cost_pct
+turnover_analysis["replacement_cost"] = (
+    turnover_analysis["expected_separations"]
+    * turnover_analysis["avg_salary"]
+    * turnover_analysis["replacement_cost_pct"]
+)
+
+turnover_analysis["net_turnover_impact"] = (
+    turnover_analysis["vacancy_savings"] - turnover_analysis["replacement_cost"]
+)
+
+print("Turnover Cost Analysis by Title")
+print(turnover_analysis[["title", "expected_separations", "vacancy_savings",
+                          "replacement_cost", "net_turnover_impact"]].to_string(index=False))
+
+print(f"\nTotal vacancy savings:     ${turnover_analysis['vacancy_savings'].sum():>12,.0f}")
+print(f"Total replacement costs:   ${turnover_analysis['replacement_cost'].sum():>12,.0f}")
+print(f"Net turnover impact:       ${turnover_analysis['net_turnover_impact'].sum():>12,.0f}")
+```
+
+```{python}
+# Visualize vacancy savings vs replacement costs
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=turnover_analysis["title"],
+    y=turnover_analysis["vacancy_savings"],
+    name="Vacancy Savings",
+    marker_color=WONG[2],
+))
+
+fig.add_trace(go.Bar(
+    x=turnover_analysis["title"],
+    y=-turnover_analysis["replacement_cost"],
+    name="Replacement Cost",
+    marker_color=WONG[5],
+))
+
+fig.add_trace(go.Scatter(
+    x=turnover_analysis["title"],
+    y=turnover_analysis["net_turnover_impact"],
+    name="Net Impact",
+    mode="markers+lines",
+    marker=dict(size=10, color=WONG[4]),
+    line=dict(color=WONG[4], dash="dash"),
+))
+
+fig.update_layout(
+    title="Vacancy Savings vs Replacement Costs by Title",
+    yaxis_title="Dollars ($)",
+    barmode="relative",
+    height=450,
+)
+fig.show()
+```
+
+## 4. Sensitivity Analysis
+
+What happens if our assumptions are wrong? Sensitivity analysis tests how outputs change when we vary input parameters.
+
+::: {.pycharm-tip}
+#### PyCharm Tip: Parameter Sweeps
+
+When running sensitivity analyses, use PyCharm's **Scientific Mode** to view DataFrames interactively. You can set breakpoints inside your loop to inspect intermediate results. The variable explorer makes it easy to compare values across iterations.
+:::
+
+```{python}
+def compute_annual_cost(df, raise_pct, fringe_adj, vacancy_rate):
+    """Compute total annual compensation cost with adjustable parameters."""
+    new_salary = df["salary"] * (1 + raise_pct)
+    effective_fringe = df["fringe_rate"] + fringe_adj
+    total_comp = new_salary * (1 + effective_fringe)
+    # Apply vacancy rate as a discount
+    net_cost = total_comp.sum() * (1 - vacancy_rate)
+    return net_cost
+
+# Parameter ranges for sensitivity analysis
+raise_range = np.arange(0.00, 0.06, 0.005)     # 0% to 5.5% raises
+fringe_adj_range = np.arange(-0.03, 0.04, 0.01) # fringe rate +/- 3%
+vacancy_range = np.arange(0.01, 0.08, 0.01)      # 1% to 7% vacancy rate
+
+# Sensitivity to raise percentage (holding others fixed)
+costs_by_raise = []
+for r in raise_range:
+    cost = compute_annual_cost(df, raise_pct=r, fringe_adj=0, vacancy_rate=0.04)
+    costs_by_raise.append({"raise_pct": r * 100, "total_cost": cost})
+
+raise_sensitivity = pd.DataFrame(costs_by_raise)
+
+# Sensitivity to vacancy rate (holding raise at 2%)
+costs_by_vacancy = []
+for v in vacancy_range:
+    cost = compute_annual_cost(df, raise_pct=0.02, fringe_adj=0, vacancy_rate=v)
+    costs_by_vacancy.append({"vacancy_rate": v * 100, "total_cost": cost})
+
+vacancy_sensitivity = pd.DataFrame(costs_by_vacancy)
+```
+
+```{python}
+fig = make_subplots(rows=1, cols=2, subplot_titles=[
+    "Cost Sensitivity to Raise %",
+    "Cost Sensitivity to Vacancy Rate",
+])
+
+fig.add_trace(
+    go.Scatter(
+        x=raise_sensitivity["raise_pct"],
+        y=raise_sensitivity["total_cost"],
+        mode="lines+markers",
+        marker=dict(color=WONG[0]),
+        line=dict(color=WONG[0]),
+        name="Raise %",
+    ),
+    row=1, col=1,
+)
+
+fig.add_trace(
+    go.Scatter(
+        x=vacancy_sensitivity["vacancy_rate"],
+        y=vacancy_sensitivity["total_cost"],
+        mode="lines+markers",
+        marker=dict(color=WONG[1]),
+        line=dict(color=WONG[1]),
+        name="Vacancy Rate",
+    ),
+    row=1, col=2,
+)
+
+fig.update_xaxes(title_text="Raise Percentage (%)", row=1, col=1)
+fig.update_xaxes(title_text="Vacancy Rate (%)", row=1, col=2)
+fig.update_yaxes(title_text="Total Annual Cost ($)", row=1, col=1)
+fig.update_yaxes(title_text="Total Annual Cost ($)", row=1, col=2)
+fig.update_layout(title="Sensitivity Analysis", height=400, width=900, showlegend=False)
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+Sensitivity sweeps in R often use `purrr::map_dfr()`:
+
+```r
+raise_sensitivity <- map_dfr(seq(0, 0.055, 0.005), function(r) {
+  tibble(
+    raise_pct = r * 100,
+    total_cost = compute_annual_cost(df, raise_pct = r, fringe_adj = 0, vacancy_rate = 0.04)
+  )
+})
+```
+
+The Python pattern of building a list of dicts in a for-loop and converting to a DataFrame is straightforward and readable, though list comprehensions work too.
+:::
+
+## 5. Multi-Year Budget Projection
+
+Now we combine raise scenarios, fringe trends, and turnover into a multi-year projection.
+
+```{python}
+def project_budget(df, years=5, annual_raise=0.02, fringe_growth=0.005,
+                   vacancy_rate=0.04, turnover_savings_pct=0.01):
+    """Project total compensation budget over multiple years.
+
+    Parameters
+    ----------
+    df : DataFrame with salary, fringe_rate columns
+    years : number of projection years
+    annual_raise : annual salary increase rate
+    fringe_growth : annual increase in fringe rate (absolute, e.g., 0.5% per year)
+    vacancy_rate : assumed steady-state vacancy rate
+    turnover_savings_pct : net savings from turnover as pct of total comp
+    """
+    projections = []
+    current_salaries = df["salary"].copy()
+    current_fringe_rates = df["fringe_rate"].copy()
+
+    for year in range(years + 1):
+        base_total = current_salaries.sum()
+        fringe_total = (current_salaries * current_fringe_rates).sum()
+        gross_comp = base_total + fringe_total
+        vacancy_discount = gross_comp * vacancy_rate
+        turnover_offset = gross_comp * turnover_savings_pct
+        net_cost = gross_comp - vacancy_discount - turnover_offset
+
+        projections.append({
+            "year": year,
+            "base_salary_total": base_total,
+            "fringe_total": fringe_total,
+            "gross_comp": gross_comp,
+            "vacancy_savings": vacancy_discount,
+            "net_cost": net_cost,
+        })
+
+        # Advance to next year
+        current_salaries = current_salaries * (1 + annual_raise)
+        current_fringe_rates = current_fringe_rates + fringe_growth
+
+    return pd.DataFrame(projections)
+```
+
+```{python}
+# Compare three budget scenarios over 5 years
+scenario_params = {
+    "Conservative (1.5% raise)": {"annual_raise": 0.015, "fringe_growth": 0.003},
+    "Moderate (2.5% raise)":     {"annual_raise": 0.025, "fringe_growth": 0.005},
+    "Aggressive (4% raise)":     {"annual_raise": 0.040, "fringe_growth": 0.007},
+}
+
+all_projections = []
+for name, params in scenario_params.items():
+    proj = project_budget(df, years=5, **params)
+    proj["scenario"] = name
+    all_projections.append(proj)
+
+projections = pd.concat(all_projections, ignore_index=True)
+
+# Show year 5 comparison
+year5 = projections[projections["year"] == 5][["scenario", "base_salary_total", "fringe_total", "net_cost"]]
+year5.columns = ["Scenario", "Base Salary", "Fringe", "Net Cost"]
+print("Year 5 Budget Comparison")
+print(year5.to_string(index=False, float_format="${:,.0f}".format))
+```
+
+```{python}
+# Cumulative cost line chart
+fig = go.Figure()
+
+for i, (name, _) in enumerate(scenario_params.items()):
+    scenario_data = projections[projections["scenario"] == name]
+    fig.add_trace(go.Scatter(
+        x=scenario_data["year"],
+        y=scenario_data["net_cost"],
+        mode="lines+markers",
+        name=name,
+        line=dict(color=WONG[i], width=3),
+        marker=dict(size=8),
+    ))
+
+fig.update_layout(
+    title="5-Year Budget Projection by Scenario",
+    xaxis_title="Year",
+    yaxis_title="Net Annual Cost ($)",
+    yaxis_tickformat="$,.0f",
+    height=450,
+    legend=dict(x=0.02, y=0.98),
+)
+fig.show()
+```
+
+### Cumulative Total Cost
+
+```{python}
+fig = go.Figure()
+
+for i, (name, _) in enumerate(scenario_params.items()):
+    scenario_data = projections[projections["scenario"] == name].copy()
+    scenario_data["cumulative_cost"] = scenario_data["net_cost"].cumsum()
+
+    fig.add_trace(go.Scatter(
+        x=scenario_data["year"],
+        y=scenario_data["cumulative_cost"],
+        mode="lines+markers",
+        name=name,
+        line=dict(color=WONG[i], width=3),
+        marker=dict(size=8),
+        fill="tonexty" if i > 0 else None,
+    ))
+
+fig.update_layout(
+    title="Cumulative Total Compensation Cost Over 5 Years",
+    xaxis_title="Year",
+    yaxis_title="Cumulative Cost ($)",
+    yaxis_tickformat="$,.0f",
+    height=450,
+)
+fig.show()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+Multi-year projections in R typically use `accumulate()` from `purrr` or a manual loop with `bind_rows()`:
+
+```r
+project_budget <- function(df, years = 5, annual_raise = 0.02) {
+  results <- vector("list", years + 1)
+  current <- df
+
+  for (yr in 0:years) {
+    results[[yr + 1]] <- tibble(year = yr, net_cost = sum(current$total_comp))
+    current <- current %>% mutate(salary = salary * (1 + annual_raise))
+  }
+
+  bind_rows(results)
+}
+```
+
+The logic is identical. Python's approach of appending dicts to a list and converting to a DataFrame mirrors the R pattern of collecting tibbles and calling `bind_rows()`.
+:::
+
+## 6. Cost Comparison Dashboard
+
+Let us build a side-by-side visualization comparing all raise strategies with their budget impact.
+
+```{python}
+# Bar chart: Year 0 vs Year 5 cost by scenario
+year0 = projections[projections["year"] == 0][["scenario", "net_cost"]].rename(
+    columns={"net_cost": "year_0_cost"}
+)
+year5_data = projections[projections["year"] == 5][["scenario", "net_cost"]].rename(
+    columns={"net_cost": "year_5_cost"}
+)
+comparison = year0.merge(year5_data, on="scenario")
+comparison["increase"] = comparison["year_5_cost"] - comparison["year_0_cost"]
+comparison["increase_pct"] = (comparison["increase"] / comparison["year_0_cost"]) * 100
+
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=comparison["scenario"],
+    y=comparison["year_0_cost"],
+    name="Year 0",
+    marker_color=WONG[1],
+))
+
+fig.add_trace(go.Bar(
+    x=comparison["scenario"],
+    y=comparison["year_5_cost"],
+    name="Year 5",
+    marker_color=WONG[4],
+))
+
+# Add percentage annotations
+for idx, row in comparison.iterrows():
+    fig.add_annotation(
+        x=row["scenario"],
+        y=row["year_5_cost"],
+        text=f"+{row['increase_pct']:.1f}%",
+        showarrow=False,
+        yshift=15,
+        font=dict(size=13, color=WONG[5]),
+    )
+
+fig.update_layout(
+    title="Budget Impact: Year 0 vs Year 5",
+    yaxis_title="Net Annual Cost ($)",
+    yaxis_tickformat="$,.0f",
+    barmode="group",
+    height=450,
+)
+fig.show()
+```
+
+::: {.pycharm-tip}
+#### PyCharm Tip: Plotly in PyCharm
+
+If plotly charts do not render inline in the PyCharm console, use `fig.write_html("output.html")` and open the file in a browser. Alternatively, enable the **Scientific Mode** plots pane, or run your script as a Jupyter notebook cell within PyCharm Professional.
+:::
+
+## Summary
+
+In this lesson you learned to:
+
+- **Calculate total compensation** using fringe benefit loading factors applied by employee category
+- **Model three raise strategies** (ATB, merit, equity) and compare their workforce-wide cost impact
+- **Estimate vacancy savings** and turnover replacement costs to get a realistic net budget figure
+- **Run sensitivity analyses** to understand how results change with different assumptions
+- **Build multi-year projections** that compound raises, fringe growth, and offsets over time
+- **Visualize budget scenarios** with plotly bar charts, line charts, and annotated comparisons
+
+The key takeaway: a well-structured cost model lets analysts answer "what if?" questions quickly. By parameterizing assumptions (raise rates, fringe growth, vacancy rates), you can re-run the model with new inputs in seconds rather than rebuilding spreadsheets from scratch.
+
+## Exercises
+
+::: {.exercise-box}
+#### Exercise: Build a Division-Level Budget Model
+
+Create a function that projects 5-year costs **by division**, with the following requirements:
+
+1. Each division gets a different raise rate based on strategic priority:
+   - "School of Engineering" and "Division of Information Technology": 3.5% (retention)
+   - "School of Business": 3.0%
+   - All other divisions: 2.0%
+2. Apply a uniform fringe growth of 0.4% per year
+3. Use a 4% vacancy rate
+4. Return a DataFrame with columns: `year`, `division`, `base_salary`, `fringe`, `net_cost`
+5. Create a plotly line chart showing net cost by division over the 5 years, with each division as a separate colored line
+6. Add a summary table showing which division has the largest absolute and percentage increase from Year 0 to Year 5
+:::
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+#| eval: false
+def project_by_division(df, years=5, raise_map=None, fringe_growth=0.004,
+                        vacancy_rate=0.04):
+    """Project budget by division with division-specific raise rates."""
+    if raise_map is None:
+        raise_map = {
+            "School of Engineering": 0.035,
+            "Division of Information Technology": 0.035,
+            "School of Business": 0.030,
+        }
+    default_raise = 0.02
+
+    projections = []
+
+    for division in df["division"].unique():
+        div_df = df[df["division"] == division].copy()
+        annual_raise = raise_map.get(division, default_raise)
+        current_salaries = div_df["salary"].copy()
+        current_fringe_rates = div_df["fringe_rate"].copy()
+
+        for year in range(years + 1):
+            base = current_salaries.sum()
+            fringe = (current_salaries * current_fringe_rates).sum()
+            gross = base + fringe
+            net = gross * (1 - vacancy_rate)
+
+            projections.append({
+                "year": year,
+                "division": division,
+                "base_salary": base,
+                "fringe": fringe,
+                "net_cost": net,
+            })
+
+            current_salaries = current_salaries * (1 + annual_raise)
+            current_fringe_rates = current_fringe_rates + fringe_growth
+
+    return pd.DataFrame(projections)
+
+
+# Run the projection
+div_projections = project_by_division(df)
+
+# Line chart
+fig = go.Figure()
+for i, division in enumerate(sorted(df["division"].unique())):
+    div_data = div_projections[div_projections["division"] == division]
+    fig.add_trace(go.Scatter(
+        x=div_data["year"],
+        y=div_data["net_cost"],
+        mode="lines+markers",
+        name=division,
+        line=dict(color=WONG[i % len(WONG)], width=2),
+    ))
+
+fig.update_layout(
+    title="5-Year Net Cost Projection by Division",
+    xaxis_title="Year",
+    yaxis_title="Net Annual Cost ($)",
+    yaxis_tickformat="$,.0f",
+    height=500,
+    legend=dict(font=dict(size=10)),
+)
+fig.show()
+
+# Summary table: Year 0 vs Year 5
+y0 = div_projections[div_projections["year"] == 0][["division", "net_cost"]].rename(
+    columns={"net_cost": "year_0"}
+)
+y5 = div_projections[div_projections["year"] == 5][["division", "net_cost"]].rename(
+    columns={"net_cost": "year_5"}
+)
+summary = y0.merge(y5, on="division")
+summary["increase"] = summary["year_5"] - summary["year_0"]
+summary["increase_pct"] = (summary["increase"] / summary["year_0"]) * 100
+summary = summary.sort_values("increase", ascending=False)
+
+print("Division Budget Growth: Year 0 to Year 5")
+print(summary.to_string(index=False, float_format="${:,.0f}".format))
+print(f"\nLargest absolute increase: {summary.iloc[0]['division']}"
+      f" (${summary.iloc[0]['increase']:,.0f})")
+print(f"Largest percentage increase: {summary.sort_values('increase_pct', ascending=False).iloc[0]['division']}"
+      f" ({summary.sort_values('increase_pct', ascending=False).iloc[0]['increase_pct']:.1f}%)")
+```
+:::
+
+## Next Steps
+
+In [Lesson 24: Markov Workforce Modeling](24-markov-workforce.qmd), we will use transition matrices to model how employees move between titles, divisions, and out of the organization over time --- connecting our cost model to workforce dynamics.

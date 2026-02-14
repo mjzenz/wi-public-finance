@@ -1,0 +1,133 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Python for Financial Analysis"
+  description: "An R User's Guide to pandas and Beyond"
+  site-url: https://mjzenz.github.io/wi-public-finance/tutorial
+  repo-url: https://github.com/mjzenz/wi-public-finance
+  repo-actions: [edit, issue]
+
+  navbar:
+    background: primary
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "Lessons"
+        menu:
+          - text: "**Part 1: Foundations**"
+          - lessons/01-setup.qmd
+          - lessons/02-syntax.qmd
+          - lessons/03-pandas-intro.qmd
+          - lessons/04-selection-filtering.qmd
+          - text: "---"
+          - text: "**Part 2: Data Transformation**"
+          - lessons/05-reshaping-aggregation.qmd
+          - lessons/06-joining-merging.qmd
+          - lessons/07-dates-timeseries.qmd
+          - lessons/08-string-operations.qmd
+          - text: "---"
+          - text: "**Part 3: Financial Analysis**"
+          - lessons/09-inflation-adjustment.qmd
+          - lessons/10-compensation-analysis.qmd
+          - lessons/11-workforce-analytics.qmd
+          - lessons/12-tracking-individuals.qmd
+          - text: "---"
+          - text: "**Part 4: Visualization**"
+          - lessons/13-plotly-basics.qmd
+          - lessons/14-interactive-dashboards.qmd
+          - text: "---"
+          - text: "**Part 5: Data Acquisition**"
+          - lessons/15-working-with-apis.qmd
+          - lessons/16-web-scraping.qmd
+          - text: "---"
+          - text: "**Part 6: Production Patterns**"
+          - lessons/17-reusable-pipelines.qmd
+          - lessons/18-capstone.qmd
+          - text: "---"
+          - text: "**Part 7: Advanced Financial Analysis**"
+          - lessons/19-inequality-metrics.qmd
+          - lessons/20-salary-compression.qmd
+          - lessons/21-statistical-testing.qmd
+          - lessons/22-forecasting.qmd
+          - lessons/23-cost-modeling.qmd
+          - lessons/24-markov-workforce.qmd
+          - lessons/25-peer-comparison.qmd
+      - text: "Exercises"
+        href: exercises/index.qmd
+    right:
+      - icon: github
+        href: https://github.com/mjzenz/wi-public-finance
+
+  sidebar:
+    style: "docked"
+    search: true
+    contents:
+      - text: "Home"
+        href: index.qmd
+      - text: "---"
+      - section: "Part 1: Foundations"
+        contents:
+          - lessons/01-setup.qmd
+          - lessons/02-syntax.qmd
+          - lessons/03-pandas-intro.qmd
+          - lessons/04-selection-filtering.qmd
+      - section: "Part 2: Data Transformation"
+        contents:
+          - lessons/05-reshaping-aggregation.qmd
+          - lessons/06-joining-merging.qmd
+          - lessons/07-dates-timeseries.qmd
+          - lessons/08-string-operations.qmd
+      - section: "Part 3: Financial Analysis"
+        contents:
+          - lessons/09-inflation-adjustment.qmd
+          - lessons/10-compensation-analysis.qmd
+          - lessons/11-workforce-analytics.qmd
+          - lessons/12-tracking-individuals.qmd
+      - section: "Part 4: Visualization"
+        contents:
+          - lessons/13-plotly-basics.qmd
+          - lessons/14-interactive-dashboards.qmd
+      - section: "Part 5: Data Acquisition"
+        contents:
+          - lessons/15-working-with-apis.qmd
+          - lessons/16-web-scraping.qmd
+      - section: "Part 6: Production Patterns"
+        contents:
+          - lessons/17-reusable-pipelines.qmd
+          - lessons/18-capstone.qmd
+      - section: "Part 7: Advanced Financial Analysis"
+        contents:
+          - lessons/19-inequality-metrics.qmd
+          - lessons/20-salary-compression.qmd
+          - lessons/21-statistical-testing.qmd
+          - lessons/22-forecasting.qmd
+          - lessons/23-cost-modeling.qmd
+          - lessons/24-markov-workforce.qmd
+          - lessons/25-peer-comparison.qmd
+      - text: "---"
+      - text: "Exercises"
+        href: exercises/index.qmd
+
+  page-footer:
+    center: |
+      Built with [Quarto](https://quarto.org/) |
+      Data: UW-Madison Public Salary Records
+
+format:
+  html:
+    theme:
+      light: flatly
+      dark: darkly
+    css: styles.css
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    code-tools: true
+    code-copy: true
+    highlight-style: github
+
+execute:
+  enabled: false
+  warning: false

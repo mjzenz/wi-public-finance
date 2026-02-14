@@ -1,0 +1,300 @@
+---
+title: "Tracking Individuals Over Time"
+subtitle: "Lesson 12"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Create stable employee identifiers across data snapshots
+- Handle name format changes between systems (UFAS → Workday)
+- Detect employee transfers between departments
+- Distinguish real transfers from organizational restructuring
+- Calculate individual salary growth trajectories
+:::
+
+## Introduction
+
+::: {.concept-box}
+#### Key Data Challenge: Identity Resolution
+
+When tracking individuals across time, you need a stable identifier. The UW salary data doesn't have a persistent employee ID, so we create one by hashing:
+
+**Last name + First name + Hire date → Unique ID**
+
+This handles name case differences (UFAS: "SMITH" vs Workday: "Smith") and is stable across system transitions.
+:::
+
+::: {.concept-box}
+#### Longitudinal Equity Monitoring
+
+Tracking individuals over time isn't just a data management exercise — it's the foundation of **equity monitoring**. Cross-sectional snapshots can show that men and women in the same job code earn similar salaries *today*, but longitudinal tracking may reveal very different stories:
+
+- **Salary growth disparities**: Do women receive smaller annual raises than men in the same department, even when starting at the same salary?
+- **Promotion velocity**: How long does it take to move from Assistant to Associate to Full Professor, broken down by gender or race? Longer time-in-rank means lower lifetime earnings even if salaries at each rank are equitable.
+- **Retention patterns**: Are underrepresented faculty leaving at higher rates? If so, the institution may look equitable in snapshots while systematically losing diverse talent.
+- **Cohort effects**: Employees hired during budget freezes may be permanently disadvantaged if subsequent raises are percentage-based (3% of a low starting salary compounds differently than 3% of a market-rate start).
+
+The **OFCCP (Office of Federal Contract Compliance Programs)** uses exactly this kind of longitudinal analysis when auditing federal contractors. Their methodology examines cohort progression over time, not just current-year snapshots. Building robust individual tracking into your data pipeline prepares you to answer these questions proactively rather than reactively during an audit.
+:::
+
+```{python}
+import pandas as pd
+import numpy as np
+import hashlib
+
+# Create sample multi-snapshot data
+data = {
+    "snapshot": ["2023-01", "2023-01", "2023-06", "2023-06", "2024-01", "2024-01"],
+    "last_name": ["SMITH", "JOHNSON", "SMITH", "JOHNSON", "Smith", "Johnson"],  # Case change
+    "first_name": ["JOHN", "MARY", "JOHN", "MARY", "John", "Mary"],
+    "hire_date": ["2015-08-01", "2018-03-15", "2015-08-01", "2018-03-15",
+                  "2015-08-01", "2018-03-15"],
+    "division": ["L&S", "Medicine", "L&S", "Medicine", "Engineering", "Medicine"],  # SMITH transferred
+    "salary": [85000, 95000, 87000, 98000, 92000, 101000]
+}
+
+df = pd.DataFrame(data)
+df["snapshot"] = pd.to_datetime(df["snapshot"])
+df["hire_date"] = pd.to_datetime(df["hire_date"])
+df
+```
+
+## Creating Stable Employee IDs
+
+```{python}
+def generate_employee_id(row):
+    """Generate stable ID from name + hire date."""
+    # Normalize to handle case differences
+    last = str(row["last_name"]).upper().strip()
+    first = str(row["first_name"]).upper().strip()
+    hire = str(row["hire_date"])[:10]  # Just the date part
+
+    # Create hash
+    key = f"{last}|{first}|{hire}"
+    return hashlib.md5(key.encode()).hexdigest()[:12]
+
+df["employee_id"] = df.apply(generate_employee_id, axis=1)
+df[["last_name", "first_name", "hire_date", "employee_id"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+library(digest)
+df %>%
+  mutate(
+    key = paste(toupper(last_name), toupper(first_name), hire_date, sep = "|"),
+    employee_id = substr(sapply(key, digest, algo = "md5"), 1, 12)
+  )
+```
+:::
+
+## Tracking Department Changes (Transfers)
+
+```{python}
+# Sort by employee and time
+df = df.sort_values(["employee_id", "snapshot"])
+
+# Get previous division for each employee
+df["prev_division"] = df.groupby("employee_id")["division"].shift(1)
+
+# Flag transfers
+df["transferred"] = (df["division"] != df["prev_division"]) & df["prev_division"].notna()
+
+df[["last_name", "snapshot", "division", "prev_division", "transferred"]]
+```
+
+### Analyzing Transfers
+
+```{python}
+# Find all transfers
+transfers = df[df["transferred"]]
+print("Transfers detected:")
+print(transfers[["last_name", "snapshot", "prev_division", "division"]])
+```
+
+## Calculating Salary Trajectories
+
+```{python}
+# Calculate salary change from previous snapshot
+df["prev_salary"] = df.groupby("employee_id")["salary"].shift(1)
+df["salary_change"] = df["salary"] - df["prev_salary"]
+df["salary_change_pct"] = (df["salary_change"] / df["prev_salary"] * 100).round(1)
+
+df[["last_name", "snapshot", "salary", "prev_salary", "salary_change_pct"]]
+```
+
+### Individual Salary Trajectory
+
+```{python}
+# Complete trajectory for one employee
+smith = df[df["last_name"].str.upper() == "SMITH"]
+print("SMITH's salary trajectory:")
+print(smith[["snapshot", "division", "salary", "salary_change_pct"]])
+
+# Total growth
+first = smith.iloc[0]["salary"]
+last = smith.iloc[-1]["salary"]
+total_growth = (last / first - 1) * 100
+print(f"\nTotal salary growth: {total_growth:.1f}%")
+```
+
+## Distinguishing Transfers from Reorganizations
+
+When many employees "transfer" between two departments with similar names, it's likely a reorganization, not real transfers.
+
+```{python}
+from difflib import SequenceMatcher
+
+def name_similarity(name1, name2):
+    """Calculate similarity between two department names."""
+    return SequenceMatcher(None, name1.lower(), name2.lower()).ratio()
+
+# Example
+print(name_similarity("College of Letters & Science", "College of Letters and Science"))
+print(name_similarity("College of Letters & Science", "School of Medicine"))
+```
+
+```{python}
+def is_likely_reorganization(old_div, new_div, similarity_threshold=0.8):
+    """Check if a 'transfer' is likely just a name change."""
+    similarity = name_similarity(old_div, new_div)
+    return similarity >= similarity_threshold
+
+# Test
+print(is_likely_reorganization("Coll of Ltrs & Sci", "College of Letters and Science"))
+print(is_likely_reorganization("L&S", "Medicine"))
+```
+
+## Cohort Analysis
+
+Analyze employees hired in the same period:
+
+```{python}
+# Create larger sample
+np.random.seed(42)
+n = 50
+cohort_df = pd.DataFrame({
+    "employee_id": [f"E{i:03d}" for i in range(n)],
+    "hire_year": np.random.choice([2018, 2019, 2020, 2021, 2022], n),
+    "starting_salary": np.random.randint(50000, 100000, n),
+    "current_salary": np.random.randint(55000, 120000, n)
+})
+
+cohort_df["salary_growth"] = (
+    (cohort_df["current_salary"] / cohort_df["starting_salary"]) - 1
+) * 100
+
+# Analyze by hire year cohort
+cohort_analysis = cohort_df.groupby("hire_year").agg(
+    count=("employee_id", "count"),
+    avg_starting=("starting_salary", "mean"),
+    avg_current=("current_salary", "mean"),
+    avg_growth_pct=("salary_growth", "mean")
+).round(0)
+
+cohort_analysis
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 12: Employee Journey Analysis
+
+1. Create employee data with at least 5 employees across 3 time periods
+2. Generate stable employee IDs using name + hire date hashing
+3. Identify which employees transferred between divisions
+4. Calculate each employee's total salary growth from first to last period
+5. Find the employee with the highest salary growth percentage
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+import hashlib
+
+# 1. Create employee data
+data = []
+employees = [
+    ("SMITH", "JOHN", "2015-01-15"),
+    ("JOHNSON", "MARY", "2017-06-01"),
+    ("WILLIAMS", "JAMES", "2019-09-20"),
+    ("BROWN", "SARAH", "2016-03-10"),
+    ("DAVIS", "MICHAEL", "2020-01-05")
+]
+
+snapshots = ["2022-01", "2023-01", "2024-01"]
+divisions = ["L&S", "Medicine", "Engineering"]
+
+for last, first, hire in employees:
+    current_div = np.random.choice(divisions)
+    base_salary = np.random.randint(60000, 100000)
+    for i, snap in enumerate(snapshots):
+        # Maybe transfer in last period
+        if i == 2 and last == "SMITH":
+            current_div = "Engineering"  # Transfer
+        data.append({
+            "snapshot": snap,
+            "last_name": last,
+            "first_name": first,
+            "hire_date": hire,
+            "division": current_div,
+            "salary": base_salary + i * np.random.randint(2000, 5000)
+        })
+
+df = pd.DataFrame(data)
+df["snapshot"] = pd.to_datetime(df["snapshot"])
+print("1. Sample data:")
+print(df.head(10))
+
+# 2. Generate employee IDs
+def make_id(row):
+    key = f"{row['last_name'].upper()}|{row['first_name'].upper()}|{row['hire_date']}"
+    return hashlib.md5(key.encode()).hexdigest()[:8]
+
+df["emp_id"] = df.apply(make_id, axis=1)
+print("\n2. With employee IDs:")
+print(df[["last_name", "hire_date", "emp_id"]].drop_duplicates())
+
+# 3. Identify transfers
+df = df.sort_values(["emp_id", "snapshot"])
+df["prev_div"] = df.groupby("emp_id")["division"].shift(1)
+df["transferred"] = (df["division"] != df["prev_div"]) & df["prev_div"].notna()
+
+transfers = df[df["transferred"]]
+print("\n3. Transfers:")
+print(transfers[["last_name", "snapshot", "prev_div", "division"]])
+
+# 4 & 5. Salary growth
+first_snap = df.groupby("emp_id").first()[["last_name", "salary"]].rename(columns={"salary": "start_salary"})
+last_snap = df.groupby("emp_id").last()[["salary"]].rename(columns={"salary": "end_salary"})
+
+growth = first_snap.join(last_snap)
+growth["growth_pct"] = ((growth["end_salary"] / growth["start_salary"]) - 1) * 100
+
+print("\n4. Salary growth:")
+print(growth.round(1))
+
+print(f"\n5. Highest growth: {growth['growth_pct'].idxmax()} - {growth.loc[growth['growth_pct'].idxmax(), 'last_name']}")
+```
+:::
+:::
+
+## Summary
+
+You've learned to track individuals over time:
+
+- **Stable IDs**: Hash name + hire date for consistent matching
+- **Transfer detection**: Compare previous and current department
+- **Reorganization filtering**: Use name similarity to exclude false transfers
+- **Salary trajectories**: Calculate growth over multiple periods
+- **Cohort analysis**: Compare groups hired at similar times
+
+## Next Steps
+
+Continue to [Lesson 13: Static Visualization with Plotly](13-plotly-basics.qmd) to learn data visualization.

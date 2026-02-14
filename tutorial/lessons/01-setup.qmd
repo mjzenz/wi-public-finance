@@ -1,0 +1,402 @@
+---
+title: "Setting Up Your Python Environment"
+subtitle: "Lesson 1"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Install Python and PyCharm on your computer
+- Create a PyCharm project with a virtual environment
+- Install packages using PyCharm's package manager
+- Run Python scripts and use the interactive console
+- Configure Quarto for Python documents
+:::
+
+## Introduction
+
+Setting up a Python environment differs from R in several ways. In R, you typically install R, then RStudio, and you're ready to go. Python requires a bit more configuration, but PyCharm handles most of the complexity for you.
+
+::: {.callout-tip collapse="true"}
+## In R
+
+In RStudio, your typical setup involves:
+
+- Installing R from CRAN
+- Installing RStudio
+- Installing packages with `install.packages("tidyverse")`
+- Using `renv` for project-specific package management
+
+Python's approach is similar but with different tools.
+:::
+
+## Step 1: Install Python
+
+### Windows
+
+1. Go to [python.org/downloads](https://www.python.org/downloads/)
+2. Download Python 3.11 or later (3.12 recommended)
+3. Run the installer
+4. **Important**: Check "Add Python to PATH" during installation
+5. Click "Install Now"
+
+To verify installation, open Command Prompt and type:
+
+```bash
+python --version
+```
+
+You should see something like `Python 3.12.1`.
+
+### macOS
+
+On macOS, the easiest method is using Homebrew:
+
+```bash
+brew install python@3.12
+```
+
+Or download from [python.org](https://www.python.org/downloads/).
+
+::: {.callout-note}
+macOS comes with Python 2.7 pre-installed (on older versions). Always use `python3` to ensure you're using Python 3.
+:::
+
+## Step 2: Install PyCharm
+
+1. Go to [jetbrains.com/pycharm/download](https://www.jetbrains.com/pycharm/download/)
+2. Download **PyCharm Community Edition** (free)
+3. Run the installer with default settings
+4. Launch PyCharm
+
+### First Launch
+
+On first launch, PyCharm will ask about:
+- UI theme (choose your preference)
+- Keymap (use defaults unless you have strong preferences)
+- Plugins (skip for now; we'll add Quarto later)
+
+## Step 3: Create Your First Project
+
+1. Click **New Project** on the welcome screen
+2. Set the project location: `C:\Users\[username]\Documents\python-finance-tutorial`
+3. Under **Python Interpreter**, select **New environment using Virtualenv**
+4. Ensure Base interpreter points to your Python 3.12 installation
+5. Click **Create**
+
+::: {.pycharm-tip}
+PyCharm creates a `venv` folder in your project containing a copy of Python and any packages you install. This keeps each project's dependencies isolated—similar to R's `renv`.
+:::
+
+### Understanding Virtual Environments
+
+::: {.callout-tip collapse="true"}
+## In R
+
+R's `renv` works similarly:
+
+```r
+# Initialize project-specific library
+renv::init()
+
+# Install packages (to project library)
+install.packages("dplyr")
+
+# Save package state
+renv::snapshot()
+
+# Restore on another machine
+renv::restore()
+```
+
+Python's `venv` + `requirements.txt` serves the same purpose.
+:::
+
+In Python, a virtual environment:
+
+- Creates an isolated Python installation for your project
+- Prevents package conflicts between projects
+- Makes your project reproducible via `requirements.txt`
+
+When PyCharm creates a project with a virtual environment, it:
+
+1. Creates a `venv/` directory with Python
+2. Activates this environment automatically when you open the project
+3. Installs packages into this isolated environment
+
+## Step 4: Install Packages
+
+Let's install the packages we'll need for this tutorial.
+
+### Method 1: PyCharm GUI
+
+1. Go to **File → Settings** (or **PyCharm → Preferences** on macOS)
+2. Navigate to **Project → Python Interpreter**
+3. Click the **+** button
+4. Search for `pandas` and click **Install Package**
+5. Repeat for: `numpy`, `openpyxl`, `plotly`
+
+### Method 2: Terminal
+
+Open PyCharm's terminal (**View → Tool Windows → Terminal**) and run:
+
+```bash
+pip install pandas numpy openpyxl plotly
+```
+
+### Method 3: requirements.txt (Recommended)
+
+Create a file named `requirements.txt` in your project root:
+
+```
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+plotly>=5.18.0
+```
+
+Then install all at once:
+
+```bash
+pip install -r requirements.txt
+```
+
+::: {.pycharm-tip}
+When you open a project with a `requirements.txt`, PyCharm will prompt you to install missing packages. This is the best practice for reproducibility.
+:::
+
+## Step 5: Your First Python Script
+
+1. Right-click on your project folder in the Project panel
+2. Select **New → Python File**
+3. Name it `hello.py`
+4. Enter this code:
+
+```{python}
+#| eval: false
+# hello.py - Your first Python script
+print("Hello from Python!")
+
+# Let's verify pandas is installed
+import pandas as pd
+print(f"pandas version: {pd.__version__}")
+
+# Create a simple DataFrame
+data = {"name": ["Alice", "Bob"], "salary": [50000, 60000]}
+df = pd.DataFrame(data)
+print(df)
+```
+
+5. Right-click in the editor and select **Run 'hello'**
+
+You should see output in the Run panel at the bottom.
+
+## Step 6: The Python Console vs Scripts
+
+PyCharm offers two ways to run code:
+
+### Scripts (Files)
+- Code saved in `.py` files
+- Run the entire file at once
+- Good for reproducible analysis
+
+### Python Console (Interactive)
+- **View → Tool Windows → Python Console**
+- Type code and see results immediately
+- Good for exploration (like R's console)
+
+::: {.callout-tip collapse="true"}
+## In R
+
+This mirrors RStudio's dual modes:
+
+- **Source pane**: Write and save scripts
+- **Console pane**: Run code interactively
+
+In RStudio, you often write in Source and use Ctrl+Enter to send lines to Console. PyCharm works similarly—select code and press **Shift+Enter** to run it in the console.
+:::
+
+### Try It: Interactive Exploration
+
+1. Open the Python Console (**View → Tool Windows → Python Console**)
+2. Type and run:
+
+```{python}
+#| eval: false
+import pandas as pd
+
+# Create sample data
+salaries = [50000, 60000, 75000, 90000]
+mean_salary = sum(salaries) / len(salaries)
+print(f"Mean salary: ${mean_salary:,.0f}")
+```
+
+## Step 7: Configure Quarto
+
+Quarto works with Python just as it does with R. Let's set it up.
+
+### Install Quarto
+
+1. Go to [quarto.org/docs/get-started](https://quarto.org/docs/get-started/)
+2. Download and install Quarto for your platform
+
+### Install PyCharm Quarto Plugin
+
+1. **File → Settings → Plugins**
+2. Search for "Quarto"
+3. Install the Quarto plugin
+4. Restart PyCharm
+
+### Create Your First Quarto Document
+
+1. Create a new file: `first_analysis.qmd`
+2. Add this content:
+
+````markdown
+---
+title: "My First Python Analysis"
+format: html
+jupyter: python3
+---
+
+## Introduction
+
+This is a Quarto document with Python code.
+
+```{{python}}
+import pandas as pd
+
+# Create sample data
+data = {
+    "employee": ["Alice", "Bob", "Carol"],
+    "salary": [65000, 72000, 58000]
+}
+df = pd.DataFrame(data)
+df
+```
+
+## Summary Statistics
+
+```{{python}}
+print(f"Mean salary: ${df['salary'].mean():,.0f}")
+print(f"Total employees: {len(df)}")
+```
+````
+
+### Render the Document
+
+Open the terminal and run:
+
+```bash
+quarto render first_analysis.qmd
+```
+
+This creates `first_analysis.html`. Open it in a browser to see your rendered document.
+
+::: {.pycharm-tip}
+For live preview while editing, run `quarto preview first_analysis.qmd` in the terminal. It will open a browser that updates as you save changes.
+:::
+
+## Project Structure
+
+By the end of this lesson, your project should look like:
+
+```
+python-finance-tutorial/
+├── venv/                    # Virtual environment (auto-created)
+├── requirements.txt         # Package dependencies
+├── hello.py                 # Test script
+└── first_analysis.qmd       # Quarto document
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 1: Complete Your Setup
+
+1. Install Python 3.11+ and PyCharm Community Edition
+2. Create a new project called `salary-analysis` with a virtual environment
+3. Create a `requirements.txt` with pandas, numpy, openpyxl, and plotly
+4. Install the packages using `pip install -r requirements.txt`
+5. Write a script that:
+   - Imports pandas
+   - Creates a DataFrame with 3 columns: name, department, salary
+   - Prints the DataFrame and its mean salary
+6. Create a Quarto document that shows your DataFrame as a formatted table
+
+::: {.callout-note collapse="true"}
+## Solution
+
+**requirements.txt:**
+```
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+plotly>=5.18.0
+```
+
+**exercise_1.py:**
+```python
+import pandas as pd
+
+# Create employee data
+data = {
+    "name": ["Alice", "Bob", "Carol"],
+    "department": ["Engineering", "Marketing", "Engineering"],
+    "salary": [85000, 72000, 91000]
+}
+
+df = pd.DataFrame(data)
+print(df)
+print(f"\nMean salary: ${df['salary'].mean():,.0f}")
+```
+
+**exercise_1.qmd:**
+````markdown
+---
+title: "Exercise 1: First Analysis"
+format: html
+jupyter: python3
+---
+
+```{{python}}
+import pandas as pd
+
+data = {
+    "name": ["Alice", "Bob", "Carol"],
+    "department": ["Engineering", "Marketing", "Engineering"],
+    "salary": [85000, 72000, 91000]
+}
+
+df = pd.DataFrame(data)
+df
+```
+````
+:::
+:::
+
+## Summary
+
+You've learned to:
+
+- Install Python and PyCharm
+- Create projects with virtual environments
+- Install packages via pip and requirements.txt
+- Run scripts and use the interactive console
+- Set up Quarto for Python documents
+
+The key differences from R:
+
+| Concept | R | Python |
+|---------|---|--------|
+| IDE | RStudio | PyCharm |
+| Package manager | `install.packages()` | `pip install` |
+| Environment isolation | `renv` | `venv` + `requirements.txt` |
+| Interactive console | R Console | Python Console |
+| Literate programming | R Markdown | Quarto (works for both!) |
+
+## Next Steps
+
+Continue to [Lesson 2: Python Syntax for R Users](02-syntax.qmd) to learn the key syntax differences between R and Python.

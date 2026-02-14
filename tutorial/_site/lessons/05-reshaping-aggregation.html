@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Reshaping and Aggregation – Python for Financial Analysis</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-455b6f09056926c92c2c76753a45642a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-1a23b3308efb191d90abb6dd37fe1581.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-455b6f09056926c92c2c76753a45642a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar docked nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Python for Financial Analysis</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-lessons" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Lessons</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-lessons">    
+        <li class="dropdown-header"><strong>Part 1: Foundations</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/01-setup.html">
+ <span class="dropdown-text">Setting Up Your Python Environment</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/02-syntax.html">
+ <span class="dropdown-text">Python Syntax for R Users</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/03-pandas-intro.html">
+ <span class="dropdown-text">Introduction to pandas DataFrames</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/04-selection-filtering.html">
+ <span class="dropdown-text">Data Selection and Filtering</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 2: Data Transformation</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/05-reshaping-aggregation.html">
+ <span class="dropdown-text">Reshaping and Aggregation</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/06-joining-merging.html">
+ <span class="dropdown-text">Joining and Merging Data</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/07-dates-timeseries.html">
+ <span class="dropdown-text">Working with Dates and Time Series</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/08-string-operations.html">
+ <span class="dropdown-text">String Operations</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 3: Financial Analysis</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/09-inflation-adjustment.html">
+ <span class="dropdown-text">Inflation Adjustment and Real vs Nominal Values</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/10-compensation-analysis.html">
+ <span class="dropdown-text">Compensation Analysis and Distributions</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/11-workforce-analytics.html">
+ <span class="dropdown-text">Workforce Analytics: Headcount and FTE</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/12-tracking-individuals.html">
+ <span class="dropdown-text">Tracking Individuals Over Time</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 4: Visualization</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/13-plotly-basics.html">
+ <span class="dropdown-text">Static Visualization with Plotly</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/14-interactive-dashboards.html">
+ <span class="dropdown-text">Interactive Dashboards in Quarto</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 5: Data Acquisition</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/15-working-with-apis.html">
+ <span class="dropdown-text">Working with APIs</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/16-web-scraping.html">
+ <span class="dropdown-text">Web Scraping Basics</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 6: Production Patterns</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/17-reusable-pipelines.html">
+ <span class="dropdown-text">Building Reusable Data Pipelines</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/18-capstone.html">
+ <span class="dropdown-text">Capstone: Complete Analysis Report</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li class="dropdown-header"><strong>Part 7: Advanced Financial Analysis</strong></li>
+        <li>
+    <a class="dropdown-item" href="../lessons/19-inequality-metrics.html">
+ <span class="dropdown-text">Inequality Metrics</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/20-salary-compression.html">
+ <span class="dropdown-text">Salary Compression Analysis</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/21-statistical-testing.html">
+ <span class="dropdown-text">Statistical Testing for Equity</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/22-forecasting.html">
+ <span class="dropdown-text">Forecasting and Trend Modeling</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/23-cost-modeling.html">
+ <span class="dropdown-text">Cost Modeling and Budget Impact</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/24-markov-workforce.html">
+ <span class="dropdown-text">Markov Chain Workforce Modeling</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../lessons/25-peer-comparison.html">
+ <span class="dropdown-text">Peer Institution Comparison</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="../exercises/index.html"> 
+<span class="menu-text">Exercises</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/mjzenz/wi-public-finance"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../lessons/05-reshaping-aggregation.html">Part 2: Data Transformation</a></li><li class="breadcrumb-item"><a href="../lessons/05-reshaping-aggregation.html">Reshaping and Aggregation</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="px-0"><hr class="sidebar-divider hi "></li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 1: Foundations</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/01-setup.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Setting Up Your Python Environment</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/02-syntax.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Python Syntax for R Users</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/03-pandas-intro.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction to pandas DataFrames</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/04-selection-filtering.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Data Selection and Filtering</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 2: Data Transformation</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/05-reshaping-aggregation.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">Reshaping and Aggregation</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/06-joining-merging.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Joining and Merging Data</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/07-dates-timeseries.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Working with Dates and Time Series</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/08-string-operations.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">String Operations</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 3: Financial Analysis</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/09-inflation-adjustment.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Inflation Adjustment and Real vs Nominal Values</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/10-compensation-analysis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Compensation Analysis and Distributions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/11-workforce-analytics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Workforce Analytics: Headcount and FTE</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/12-tracking-individuals.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Tracking Individuals Over Time</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 4: Visualization</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/13-plotly-basics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Static Visualization with Plotly</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/14-interactive-dashboards.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Interactive Dashboards in Quarto</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 5: Data Acquisition</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/15-working-with-apis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Working with APIs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/16-web-scraping.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Web Scraping Basics</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 6: Production Patterns</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/17-reusable-pipelines.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Building Reusable Data Pipelines</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/18-capstone.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Capstone: Complete Analysis Report</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 7: Advanced Financial Analysis</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/19-inequality-metrics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Inequality Metrics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/20-salary-compression.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Salary Compression Analysis</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/21-statistical-testing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Statistical Testing for Equity</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/22-forecasting.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Forecasting and Trend Modeling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/23-cost-modeling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Cost Modeling and Budget Impact</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/24-markov-workforce.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Markov Chain Workforce Modeling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../lessons/25-peer-comparison.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Peer Institution Comparison</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="px-0"><hr class="sidebar-divider hi "></li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../exercises/index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exercises</span></a>
+  </div>
+</li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#grouping-with-groupby" id="toc-grouping-with-groupby" class="nav-link" data-scroll-target="#grouping-with-groupby">Grouping with <code>groupby()</code></a>
+  <ul class="collapse">
+  <li><a href="#grouping-by-multiple-columns" id="toc-grouping-by-multiple-columns" class="nav-link" data-scroll-target="#grouping-by-multiple-columns">Grouping by Multiple Columns</a></li>
+  <li><a href="#aggregating-multiple-columns" id="toc-aggregating-multiple-columns" class="nav-link" data-scroll-target="#aggregating-multiple-columns">Aggregating Multiple Columns</a></li>
+  </ul></li>
+  <li><a href="#multiple-aggregation-functions-with-agg" id="toc-multiple-aggregation-functions-with-agg" class="nav-link" data-scroll-target="#multiple-aggregation-functions-with-agg">Multiple Aggregation Functions with <code>agg()</code></a>
+  <ul class="collapse">
+  <li><a href="#named-aggregations" id="toc-named-aggregations" class="nav-link" data-scroll-target="#named-aggregations">Named Aggregations</a></li>
+  <li><a href="#custom-aggregation-functions" id="toc-custom-aggregation-functions" class="nav-link" data-scroll-target="#custom-aggregation-functions">Custom Aggregation Functions</a></li>
+  </ul></li>
+  <li><a href="#pivot-tables" id="toc-pivot-tables" class="nav-link" data-scroll-target="#pivot-tables">Pivot Tables</a>
+  <ul class="collapse">
+  <li><a href="#multiple-aggregation-functions-in-pivot" id="toc-multiple-aggregation-functions-in-pivot" class="nav-link" data-scroll-target="#multiple-aggregation-functions-in-pivot">Multiple Aggregation Functions in Pivot</a></li>
+  <li><a href="#multiple-values" id="toc-multiple-values" class="nav-link" data-scroll-target="#multiple-values">Multiple Values</a></li>
+  <li><a href="#adding-margins-totals" id="toc-adding-margins-totals" class="nav-link" data-scroll-target="#adding-margins-totals">Adding Margins (Totals)</a></li>
+  </ul></li>
+  <li><a href="#melting-data-wide-to-long" id="toc-melting-data-wide-to-long" class="nav-link" data-scroll-target="#melting-data-wide-to-long">Melting Data (Wide to Long)</a>
+  <ul class="collapse">
+  <li><a href="#practical-example-fte-over-time" id="toc-practical-example-fte-over-time" class="nav-link" data-scroll-target="#practical-example-fte-over-time">Practical Example: FTE Over Time</a></li>
+  </ul></li>
+  <li><a href="#crosstab-quick-frequency-tables" id="toc-crosstab-quick-frequency-tables" class="nav-link" data-scroll-target="#crosstab-quick-frequency-tables">Crosstab: Quick Frequency Tables</a></li>
+  <li><a href="#transforming-groups" id="toc-transforming-groups" class="nav-link" data-scroll-target="#transforming-groups">Transforming Groups</a>
+  <ul class="collapse">
+  <li><a href="#using-transform" id="toc-using-transform" class="nav-link" data-scroll-target="#using-transform">Using <code>transform()</code></a></li>
+  <li><a href="#calculating-percentiles-within-groups" id="toc-calculating-percentiles-within-groups" class="nav-link" data-scroll-target="#calculating-percentiles-within-groups">Calculating Percentiles Within Groups</a></li>
+  </ul></li>
+  <li><a href="#combining-operations" id="toc-combining-operations" class="nav-link" data-scroll-target="#combining-operations">Combining Operations</a></li>
+  <li><a href="#quick-reference" id="toc-quick-reference" class="nav-link" data-scroll-target="#quick-reference">Quick Reference</a></li>
+  <li><a href="#exercise" id="toc-exercise" class="nav-link" data-scroll-target="#exercise">Exercise</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#next-steps" id="toc-next-steps" class="nav-link" data-scroll-target="#next-steps">Next Steps</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/mjzenz/wi-public-finance/edit/main/lessons/05-reshaping-aggregation.qmd" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mjzenz/wi-public-finance/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../lessons/05-reshaping-aggregation.html">Part 2: Data Transformation</a></li><li class="breadcrumb-item"><a href="../lessons/05-reshaping-aggregation.html">Reshaping and Aggregation</a></li></ol></nav>
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Reshaping and Aggregation</h1><button type="button" class="btn code-tools-button" id="quarto-code-tools-source"><i class="bi"></i> Code</button></div></div>
+<p class="subtitle lead">Lesson 5</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="learning-objectives" class="level4 learning-objectives">
+<h4 class="anchored" data-anchor-id="learning-objectives">Learning Objectives</h4>
+<p>After this lesson, you will be able to:</p>
+<ul>
+<li>Use <code>groupby()</code> to aggregate data by categories</li>
+<li>Apply multiple aggregation functions simultaneously</li>
+<li>Reshape data with <code>pivot_table()</code> (wide format)</li>
+<li>Reshape data with <code>melt()</code> (long format)</li>
+<li>Combine grouping with aggregation for summary statistics</li>
+</ul>
+</section>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>Aggregating and reshaping data is central to analysis. You need to summarize data by groups, calculate statistics, and transform between wide and long formats. In pandas, <code>groupby()</code>, <code>pivot_table()</code>, and <code>melt()</code> are your primary tools.</p>
+<div id="124ef234" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create sample multi-period salary data</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>salary_data <span class="op">=</span> {</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"employee_id"</span>: [<span class="st">"E001"</span>, <span class="st">"E002"</span>, <span class="st">"E003"</span>, <span class="st">"E004"</span>, <span class="st">"E005"</span>] <span class="op">*</span> <span class="dv">3</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"date"</span>: [<span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>             <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>             <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>],</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"last_name"</span>: [<span class="st">"SMITH"</span>, <span class="st">"JOHNSON"</span>, <span class="st">"WILLIAMS"</span>, <span class="st">"BROWN"</span>, <span class="st">"JONES"</span>] <span class="op">*</span> <span class="dv">3</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"division"</span>: [</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span>,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"employee_category"</span>: [</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>,</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>,</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="st">"salary"</span>: [<span class="dv">85000</span>, <span class="dv">125000</span>, <span class="dv">62000</span>, <span class="dv">95000</span>, <span class="dv">58000</span>,</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>               <span class="dv">87000</span>, <span class="dv">128000</span>, <span class="dv">64000</span>, <span class="dv">98000</span>, <span class="dv">60000</span>,</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>               <span class="dv">90000</span>, <span class="dv">132000</span>, <span class="dv">66000</span>, <span class="dv">102000</span>, <span class="dv">63000</span>],</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="st">"fte"</span>: [<span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.8</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>,</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.8</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>,</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.9</span>, <span class="fl">1.0</span>, <span class="fl">0.6</span>]</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.DataFrame(salary_data)</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>df</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="grouping-with-groupby" class="level2">
+<h2 class="anchored" data-anchor-id="grouping-with-groupby">Grouping with <code>groupby()</code></h2>
+<p><code>groupby()</code> splits data into groups, applies a function to each group, and combines results:</p>
+<div id="09105d23" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Group by division and calculate mean salary</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].mean()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>This returns a Series. To get a DataFrame, use double brackets or reset the index:</p>
+<div id="dede873d" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Reset index to get DataFrame</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].mean().reset_index()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr approach</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">salary =</span> <span class="fu">mean</span>(salary))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+<section id="grouping-by-multiple-columns" class="level3">
+<h3 class="anchored" data-anchor-id="grouping-by-multiple-columns">Grouping by Multiple Columns</h3>
+<div id="d1acfb44" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Group by division and date</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].mean().reset_index()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="aggregating-multiple-columns" class="level3">
+<h3 class="anchored" data-anchor-id="aggregating-multiple-columns">Aggregating Multiple Columns</h3>
+<div id="f7064406" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Aggregate multiple columns</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[[<span class="st">"salary"</span>, <span class="st">"fte"</span>]].mean()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="multiple-aggregation-functions-with-agg" class="level2">
+<h2 class="anchored" data-anchor-id="multiple-aggregation-functions-with-agg">Multiple Aggregation Functions with <code>agg()</code></h2>
+<p>Use <code>agg()</code> to apply multiple functions at once:</p>
+<div id="547a99a9" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple aggregations</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg([<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"min"</span>, <span class="st">"max"</span>, <span class="st">"count"</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<section id="named-aggregations" class="level3">
+<h3 class="anchored" data-anchor-id="named-aggregations">Named Aggregations</h3>
+<p>For cleaner output with custom column names:</p>
+<div id="b3b3abec" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Named aggregations (pandas 0.25+)</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> df.groupby(<span class="st">"division"</span>).agg(</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    avg_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"mean"</span>),</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    median_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"median"</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    total_fte<span class="op">=</span>(<span class="st">"fte"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    headcount<span class="op">=</span>(<span class="st">"employee_id"</span>, <span class="st">"count"</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>).reset_index()</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr approach</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_salary =</span> <span class="fu">mean</span>(salary),</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">median_salary =</span> <span class="fu">median</span>(salary),</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">total_fte =</span> <span class="fu">sum</span>(fte),</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">headcount =</span> <span class="fu">n</span>()</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+</section>
+<section id="custom-aggregation-functions" class="level3">
+<h3 class="anchored" data-anchor-id="custom-aggregation-functions">Custom Aggregation Functions</h3>
+<p>You can use custom functions or lambdas:</p>
+<div id="c202b3e0" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Range (max - min)</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg(<span class="kw">lambda</span> x: x.<span class="bu">max</span>() <span class="op">-</span> x.<span class="bu">min</span>())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="4c05c842" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple custom aggregations</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> salary_range(x):</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.<span class="bu">max</span>() <span class="op">-</span> x.<span class="bu">min</span>()</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> coefficient_of_variation(x):</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.std() <span class="op">/</span> x.mean() <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg([</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"range"</span>, salary_range),</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"cv_percent"</span>, coefficient_of_variation)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="pivot-tables" class="level2">
+<h2 class="anchored" data-anchor-id="pivot-tables">Pivot Tables</h2>
+<p>Pivot tables reshape data from long to wide format, similar to Excel pivot tables:</p>
+<div id="dc65c44d" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create pivot table: rows=division, columns=date, values=salary mean</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>pivot</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># tidyr approach</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division, date) <span class="sc">%&gt;%</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">salary =</span> <span class="fu">mean</span>(salary)) <span class="sc">%&gt;%</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> date, <span class="at">values_from =</span> salary)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+<section id="multiple-aggregation-functions-in-pivot" class="level3">
+<h3 class="anchored" data-anchor-id="multiple-aggregation-functions-in-pivot">Multiple Aggregation Functions in Pivot</h3>
+<div id="a751477b" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple aggregations</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>pivot_multi <span class="op">=</span> df.pivot_table(</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span>[<span class="st">"mean"</span>, <span class="st">"count"</span>]</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>pivot_multi</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="multiple-values" class="level3">
+<h3 class="anchored" data-anchor-id="multiple-values">Multiple Values</h3>
+<div id="142862a7" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple value columns</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>pivot_values <span class="op">=</span> df.pivot_table(</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span>[<span class="st">"salary"</span>, <span class="st">"fte"</span>],</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>pivot_values</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="adding-margins-totals" class="level3">
+<h3 class="anchored" data-anchor-id="adding-margins-totals">Adding Margins (Totals)</h3>
+<div id="6de26a55" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Add row and column totals</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>pivot_totals <span class="op">=</span> df.pivot_table(</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span>,</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    margins<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    margins_name<span class="op">=</span><span class="st">"Overall"</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>pivot_totals</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="melting-data-wide-to-long" class="level2">
+<h2 class="anchored" data-anchor-id="melting-data-wide-to-long">Melting Data (Wide to Long)</h2>
+<p><code>melt()</code> converts wide data to long format (the opposite of pivot):</p>
+<div id="9f2aa126" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Start with our pivot table</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>wide_data <span class="op">=</span> pivot.reset_index()</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>wide_data</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="4a073571" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Melt to long format</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>long_data <span class="op">=</span> wide_data.melt(</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    id_vars<span class="op">=</span>[<span class="st">"division"</span>],</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    var_name<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    value_name<span class="op">=</span><span class="st">"avg_salary"</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>long_data</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># tidyr approach</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>wide_data <span class="sc">%&gt;%</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">cols =</span> <span class="sc">-</span>division,</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="st">"date"</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">"avg_salary"</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+<section id="practical-example-fte-over-time" class="level3">
+<h3 class="anchored" data-anchor-id="practical-example-fte-over-time">Practical Example: FTE Over Time</h3>
+<div id="bf78c8ba" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create FTE pivot by division and date</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>fte_pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"fte"</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"sum"</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>fte_pivot</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="9d105940" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate change from first to last period</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>fte_pivot[<span class="st">"change"</span>] <span class="op">=</span> fte_pivot[<span class="st">"2024-01"</span>] <span class="op">-</span> fte_pivot[<span class="st">"2023-01"</span>]</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>fte_pivot[<span class="st">"pct_change"</span>] <span class="op">=</span> (fte_pivot[<span class="st">"change"</span>] <span class="op">/</span> fte_pivot[<span class="st">"2023-01"</span>] <span class="op">*</span> <span class="dv">100</span>).<span class="bu">round</span>(<span class="dv">1</span>)</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>fte_pivot</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="crosstab-quick-frequency-tables" class="level2">
+<h2 class="anchored" data-anchor-id="crosstab-quick-frequency-tables">Crosstab: Quick Frequency Tables</h2>
+<p><code>pd.crosstab()</code> creates frequency tables:</p>
+<div id="f602461a" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count of employees by division and category</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>pd.crosstab(df[<span class="st">"division"</span>], df[<span class="st">"employee_category"</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="82542280" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># With row percentages</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>pd.crosstab(</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"division"</span>],</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"employee_category"</span>],</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    normalize<span class="op">=</span><span class="st">"index"</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">2</span>) <span class="op">*</span> <span class="dv">100</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Base R</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="fu">table</span>(df<span class="sc">$</span>division, df<span class="sc">$</span>employee_category)</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Proportions</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a><span class="fu">prop.table</span>(<span class="fu">table</span>(df<span class="sc">$</span>division, df<span class="sc">$</span>employee_category), <span class="at">margin =</span> <span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+</section>
+<section id="transforming-groups" class="level2">
+<h2 class="anchored" data-anchor-id="transforming-groups">Transforming Groups</h2>
+<p>Sometimes you want to add aggregated values back to the original DataFrame:</p>
+<section id="using-transform" class="level3">
+<h3 class="anchored" data-anchor-id="using-transform">Using <code>transform()</code></h3>
+<div id="8a91e603" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Add division mean salary to each row</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"division_avg_salary"</span>] <span class="op">=</span> df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].transform(<span class="st">"mean"</span>)</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"division_avg_salary"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="f68d179c" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate difference from group mean</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"diff_from_avg"</span>] <span class="op">=</span> df[<span class="st">"salary"</span>] <span class="op">-</span> df[<span class="st">"division_avg_salary"</span>]</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"division_avg_salary"</span>, <span class="st">"diff_from_avg"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>In R
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr mutate with group</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">division_avg_salary =</span> <span class="fu">mean</span>(salary),</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">diff_from_avg =</span> salary <span class="sc">-</span> division_avg_salary</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+</section>
+<section id="calculating-percentiles-within-groups" class="level3">
+<h3 class="anchored" data-anchor-id="calculating-percentiles-within-groups">Calculating Percentiles Within Groups</h3>
+<div id="a008ec47" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Add salary percentile within division</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"salary_pctile"</span>] <span class="op">=</span> df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].transform(</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> x: x.rank(pct<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"salary_pctile"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="combining-operations" class="level2">
+<h2 class="anchored" data-anchor-id="combining-operations">Combining Operations</h2>
+<p>A complete analysis often chains multiple operations:</p>
+<div id="acf0b685" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Complete analysis pipeline</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>analysis <span class="op">=</span> (</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    df</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    .groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    .agg(</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>        total_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>        total_fte<span class="op">=</span>(<span class="st">"fte"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>        headcount<span class="op">=</span>(<span class="st">"employee_id"</span>, <span class="st">"count"</span>)</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>    .reset_index()</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Add calculated column</span></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a>analysis[<span class="st">"salary_per_fte"</span>] <span class="op">=</span> analysis[<span class="st">"total_salary"</span>] <span class="op">/</span> analysis[<span class="st">"total_fte"</span>]</span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>analysis</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="65b755d1" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Pivot for time comparison</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>time_comparison <span class="op">=</span> analysis.pivot_table(</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary_per_fte"</span>,</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>time_comparison</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="quick-reference" class="level2">
+<h2 class="anchored" data-anchor-id="quick-reference">Quick Reference</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 22%">
+<col style="width: 29%">
+<col style="width: 48%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>pandas</th>
+<th>dplyr/tidyr</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Group and summarize</td>
+<td><code>df.groupby("col").agg(...)</code></td>
+<td><code>group_by() %&gt;% summarize()</code></td>
+</tr>
+<tr class="even">
+<td>Multiple agg functions</td>
+<td><code>agg(["mean", "sum"])</code></td>
+<td><code>summarize(m=mean(), s=sum())</code></td>
+</tr>
+<tr class="odd">
+<td>Named aggregations</td>
+<td><code>agg(name=("col", "func"))</code></td>
+<td><code>summarize(name = func(col))</code></td>
+</tr>
+<tr class="even">
+<td>Pivot to wide</td>
+<td><code>pivot_table()</code></td>
+<td><code>pivot_wider()</code></td>
+</tr>
+<tr class="odd">
+<td>Melt to long</td>
+<td><code>melt()</code></td>
+<td><code>pivot_longer()</code></td>
+</tr>
+<tr class="even">
+<td>Frequency table</td>
+<td><code>pd.crosstab()</code></td>
+<td><code>table()</code> or <code>count()</code></td>
+</tr>
+<tr class="odd">
+<td>Add group stat</td>
+<td><code>transform()</code></td>
+<td><code>mutate()</code> with grouped df</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exercise" class="level2">
+<h2 class="anchored" data-anchor-id="exercise">Exercise</h2>
+<section id="exercise-5-salary-aggregations" class="level4 exercise-box">
+<h4 class="anchored" data-anchor-id="exercise-5-salary-aggregations">Exercise 5: Salary Aggregations</h4>
+<p>Using the sample salary data:</p>
+<ol type="1">
+<li>Calculate the mean, median, and max salary for each employee category</li>
+<li>Create a pivot table showing total FTE by division (rows) and date (columns)</li>
+<li>Calculate the total salary expenditure by division for each date</li>
+<li>For each employee, calculate their salary as a percentage of their division’s total</li>
+<li>Create a crosstab showing the count of employees by division and category</li>
+</ol>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Solution
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div id="5d97c573" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Salary statistics by employee category</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"1. Salary statistics by category:"</span>)</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>category_stats <span class="op">=</span> df.groupby(<span class="st">"employee_category"</span>)[<span class="st">"salary"</span>].agg(</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>    [<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"max"</span>]</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">0</span>)</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(category_stats)</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. FTE pivot table</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">2. FTE by division and date:"</span>)</span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>fte_pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"fte"</span>,</span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"sum"</span></span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fte_pivot)</span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Total salary by division and date</span></span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">3. Total salary expenditure:"</span>)</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>salary_total <span class="op">=</span> df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].<span class="bu">sum</span>().reset_index()</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>salary_pivot <span class="op">=</span> salary_total.pivot(index<span class="op">=</span><span class="st">"division"</span>, columns<span class="op">=</span><span class="st">"date"</span>, values<span class="op">=</span><span class="st">"salary"</span>)</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(salary_pivot)</span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Salary as percentage of division total</span></span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">4. Salary as </span><span class="sc">% o</span><span class="st">f division total:"</span>)</span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"division_total"</span>] <span class="op">=</span> df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].transform(<span class="st">"sum"</span>)</span>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"pct_of_division"</span>] <span class="op">=</span> (df[<span class="st">"salary"</span>] <span class="op">/</span> df[<span class="st">"division_total"</span>] <span class="op">*</span> <span class="dv">100</span>).<span class="bu">round</span>(<span class="dv">1</span>)</span>
+<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"date"</span>, <span class="st">"salary"</span>, <span class="st">"pct_of_division"</span>]].head(<span class="dv">10</span>))</span>
+<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Crosstab</span></span>
+<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">5. Employee count by division and category:"</span>)</span>
+<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a>crosstab <span class="op">=</span> pd.crosstab(df[<span class="st">"division"</span>], df[<span class="st">"employee_category"</span>])</span>
+<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(crosstab)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<p>You’ve learned the core data transformation operations:</p>
+<ul>
+<li><strong><code>groupby()</code></strong>: Split-apply-combine pattern for aggregation</li>
+<li><strong><code>agg()</code></strong>: Apply multiple aggregation functions at once</li>
+<li><strong><code>pivot_table()</code></strong>: Reshape from long to wide format</li>
+<li><strong><code>melt()</code></strong>: Reshape from wide to long format</li>
+<li><strong><code>transform()</code></strong>: Add aggregated values back to original data</li>
+<li><strong><code>crosstab()</code></strong>: Quick frequency tables</li>
+</ul>
+<p>Key differences from R: - pandas uses <code>groupby().agg()</code> instead of <code>group_by() %&gt;% summarize()</code> - Column selection syntax: <code>df.groupby("g")["col"]</code> vs <code>summarize(col = func(col))</code> - <code>pivot_table()</code> is more powerful than <code>pivot_wider()</code> with built-in aggregation</p>
+</section>
+<section id="next-steps" class="level2">
+<h2 class="anchored" data-anchor-id="next-steps">Next Steps</h2>
+<p>Continue to <a href="../lessons/06-joining-merging.html">Lesson 6: Joining and Merging Data</a> to learn how to combine multiple DataFrames.</p>
+
+
+<!-- -->
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/mjzenz\.github\.io\/wi-public-finance\/tutorial");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Reshaping and Aggregation"</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Lesson 5"</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>::: {.learning-objectives}</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Learning Objectives</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>After this lesson, you will be able to:</span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Use <span class="in">`groupby()`</span> to aggregate data by categories</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Apply multiple aggregation functions simultaneously</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Reshape data with <span class="in">`pivot_table()`</span> (wide format)</span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Reshape data with <span class="in">`melt()`</span> (long format)</span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Combine grouping with aggregation for summary statistics</span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a><span class="fu">## Introduction</span></span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>Aggregating and reshaping data is central to analysis. You need to summarize data by groups, calculate statistics, and transform between wide and long formats. In pandas, <span class="in">`groupby()`</span>, <span class="in">`pivot_table()`</span>, and <span class="in">`melt()`</span> are your primary tools.</span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb32-27"><a href="#cb32-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-28"><a href="#cb32-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Create sample multi-period salary data</span></span>
+<span id="cb32-29"><a href="#cb32-29" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>)</span>
+<span id="cb32-30"><a href="#cb32-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-31"><a href="#cb32-31" aria-hidden="true" tabindex="-1"></a>salary_data <span class="op">=</span> {</span>
+<span id="cb32-32"><a href="#cb32-32" aria-hidden="true" tabindex="-1"></a>    <span class="st">"employee_id"</span>: [<span class="st">"E001"</span>, <span class="st">"E002"</span>, <span class="st">"E003"</span>, <span class="st">"E004"</span>, <span class="st">"E005"</span>] <span class="op">*</span> <span class="dv">3</span>,</span>
+<span id="cb32-33"><a href="#cb32-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"date"</span>: [<span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>, <span class="st">"2023-01"</span>,</span>
+<span id="cb32-34"><a href="#cb32-34" aria-hidden="true" tabindex="-1"></a>             <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>, <span class="st">"2023-06"</span>,</span>
+<span id="cb32-35"><a href="#cb32-35" aria-hidden="true" tabindex="-1"></a>             <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>, <span class="st">"2024-01"</span>],</span>
+<span id="cb32-36"><a href="#cb32-36" aria-hidden="true" tabindex="-1"></a>    <span class="st">"last_name"</span>: [<span class="st">"SMITH"</span>, <span class="st">"JOHNSON"</span>, <span class="st">"WILLIAMS"</span>, <span class="st">"BROWN"</span>, <span class="st">"JONES"</span>] <span class="op">*</span> <span class="dv">3</span>,</span>
+<span id="cb32-37"><a href="#cb32-37" aria-hidden="true" tabindex="-1"></a>    <span class="st">"division"</span>: [</span>
+<span id="cb32-38"><a href="#cb32-38" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span>,</span>
+<span id="cb32-39"><a href="#cb32-39" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span>,</span>
+<span id="cb32-40"><a href="#cb32-40" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Letters &amp; Science"</span>, <span class="st">"Medicine"</span>, <span class="st">"Letters &amp; Science"</span>, <span class="st">"Engineering"</span>, <span class="st">"Business"</span></span>
+<span id="cb32-41"><a href="#cb32-41" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb32-42"><a href="#cb32-42" aria-hidden="true" tabindex="-1"></a>    <span class="st">"employee_category"</span>: [</span>
+<span id="cb32-43"><a href="#cb32-43" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>,</span>
+<span id="cb32-44"><a href="#cb32-44" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>,</span>
+<span id="cb32-45"><a href="#cb32-45" aria-hidden="true" tabindex="-1"></a>        <span class="st">"Faculty"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span>, <span class="st">"Faculty"</span>, <span class="st">"Academic Staff"</span></span>
+<span id="cb32-46"><a href="#cb32-46" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb32-47"><a href="#cb32-47" aria-hidden="true" tabindex="-1"></a>    <span class="st">"salary"</span>: [<span class="dv">85000</span>, <span class="dv">125000</span>, <span class="dv">62000</span>, <span class="dv">95000</span>, <span class="dv">58000</span>,</span>
+<span id="cb32-48"><a href="#cb32-48" aria-hidden="true" tabindex="-1"></a>               <span class="dv">87000</span>, <span class="dv">128000</span>, <span class="dv">64000</span>, <span class="dv">98000</span>, <span class="dv">60000</span>,</span>
+<span id="cb32-49"><a href="#cb32-49" aria-hidden="true" tabindex="-1"></a>               <span class="dv">90000</span>, <span class="dv">132000</span>, <span class="dv">66000</span>, <span class="dv">102000</span>, <span class="dv">63000</span>],</span>
+<span id="cb32-50"><a href="#cb32-50" aria-hidden="true" tabindex="-1"></a>    <span class="st">"fte"</span>: [<span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.8</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>,</span>
+<span id="cb32-51"><a href="#cb32-51" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.8</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>,</span>
+<span id="cb32-52"><a href="#cb32-52" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.9</span>, <span class="fl">1.0</span>, <span class="fl">0.6</span>]</span>
+<span id="cb32-53"><a href="#cb32-53" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb32-54"><a href="#cb32-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-55"><a href="#cb32-55" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.DataFrame(salary_data)</span>
+<span id="cb32-56"><a href="#cb32-56" aria-hidden="true" tabindex="-1"></a>df</span>
+<span id="cb32-57"><a href="#cb32-57" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-58"><a href="#cb32-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-59"><a href="#cb32-59" aria-hidden="true" tabindex="-1"></a><span class="fu">## Grouping with `groupby()`</span></span>
+<span id="cb32-60"><a href="#cb32-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-61"><a href="#cb32-61" aria-hidden="true" tabindex="-1"></a><span class="in">`groupby()`</span> splits data into groups, applies a function to each group, and combines results:</span>
+<span id="cb32-62"><a href="#cb32-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-65"><a href="#cb32-65" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-66"><a href="#cb32-66" aria-hidden="true" tabindex="-1"></a><span class="co"># Group by division and calculate mean salary</span></span>
+<span id="cb32-67"><a href="#cb32-67" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].mean()</span>
+<span id="cb32-68"><a href="#cb32-68" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-69"><a href="#cb32-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-70"><a href="#cb32-70" aria-hidden="true" tabindex="-1"></a>This returns a Series. To get a DataFrame, use double brackets or reset the index:</span>
+<span id="cb32-71"><a href="#cb32-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-74"><a href="#cb32-74" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-75"><a href="#cb32-75" aria-hidden="true" tabindex="-1"></a><span class="co"># Reset index to get DataFrame</span></span>
+<span id="cb32-76"><a href="#cb32-76" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].mean().reset_index()</span>
+<span id="cb32-77"><a href="#cb32-77" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-78"><a href="#cb32-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-79"><a href="#cb32-79" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-80"><a href="#cb32-80" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-81"><a href="#cb32-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-82"><a href="#cb32-82" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-83"><a href="#cb32-83" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr approach</span></span>
+<span id="cb32-84"><a href="#cb32-84" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb32-85"><a href="#cb32-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb32-86"><a href="#cb32-86" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">salary =</span> <span class="fu">mean</span>(salary))</span>
+<span id="cb32-87"><a href="#cb32-87" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-88"><a href="#cb32-88" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-89"><a href="#cb32-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-90"><a href="#cb32-90" aria-hidden="true" tabindex="-1"></a><span class="fu">### Grouping by Multiple Columns</span></span>
+<span id="cb32-91"><a href="#cb32-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-94"><a href="#cb32-94" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-95"><a href="#cb32-95" aria-hidden="true" tabindex="-1"></a><span class="co"># Group by division and date</span></span>
+<span id="cb32-96"><a href="#cb32-96" aria-hidden="true" tabindex="-1"></a>df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].mean().reset_index()</span>
+<span id="cb32-97"><a href="#cb32-97" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-98"><a href="#cb32-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-99"><a href="#cb32-99" aria-hidden="true" tabindex="-1"></a><span class="fu">### Aggregating Multiple Columns</span></span>
+<span id="cb32-100"><a href="#cb32-100" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-103"><a href="#cb32-103" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-104"><a href="#cb32-104" aria-hidden="true" tabindex="-1"></a><span class="co"># Aggregate multiple columns</span></span>
+<span id="cb32-105"><a href="#cb32-105" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[[<span class="st">"salary"</span>, <span class="st">"fte"</span>]].mean()</span>
+<span id="cb32-106"><a href="#cb32-106" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-107"><a href="#cb32-107" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-108"><a href="#cb32-108" aria-hidden="true" tabindex="-1"></a><span class="fu">## Multiple Aggregation Functions with `agg()`</span></span>
+<span id="cb32-109"><a href="#cb32-109" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-110"><a href="#cb32-110" aria-hidden="true" tabindex="-1"></a>Use <span class="in">`agg()`</span> to apply multiple functions at once:</span>
+<span id="cb32-111"><a href="#cb32-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-114"><a href="#cb32-114" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-115"><a href="#cb32-115" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple aggregations</span></span>
+<span id="cb32-116"><a href="#cb32-116" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg([<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"min"</span>, <span class="st">"max"</span>, <span class="st">"count"</span>])</span>
+<span id="cb32-117"><a href="#cb32-117" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-118"><a href="#cb32-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-119"><a href="#cb32-119" aria-hidden="true" tabindex="-1"></a><span class="fu">### Named Aggregations</span></span>
+<span id="cb32-120"><a href="#cb32-120" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-121"><a href="#cb32-121" aria-hidden="true" tabindex="-1"></a>For cleaner output with custom column names:</span>
+<span id="cb32-122"><a href="#cb32-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-125"><a href="#cb32-125" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-126"><a href="#cb32-126" aria-hidden="true" tabindex="-1"></a><span class="co"># Named aggregations (pandas 0.25+)</span></span>
+<span id="cb32-127"><a href="#cb32-127" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> df.groupby(<span class="st">"division"</span>).agg(</span>
+<span id="cb32-128"><a href="#cb32-128" aria-hidden="true" tabindex="-1"></a>    avg_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"mean"</span>),</span>
+<span id="cb32-129"><a href="#cb32-129" aria-hidden="true" tabindex="-1"></a>    median_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"median"</span>),</span>
+<span id="cb32-130"><a href="#cb32-130" aria-hidden="true" tabindex="-1"></a>    total_fte<span class="op">=</span>(<span class="st">"fte"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb32-131"><a href="#cb32-131" aria-hidden="true" tabindex="-1"></a>    headcount<span class="op">=</span>(<span class="st">"employee_id"</span>, <span class="st">"count"</span>)</span>
+<span id="cb32-132"><a href="#cb32-132" aria-hidden="true" tabindex="-1"></a>).reset_index()</span>
+<span id="cb32-133"><a href="#cb32-133" aria-hidden="true" tabindex="-1"></a>summary</span>
+<span id="cb32-134"><a href="#cb32-134" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-135"><a href="#cb32-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-136"><a href="#cb32-136" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-137"><a href="#cb32-137" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-138"><a href="#cb32-138" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-139"><a href="#cb32-139" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-140"><a href="#cb32-140" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr approach</span></span>
+<span id="cb32-141"><a href="#cb32-141" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb32-142"><a href="#cb32-142" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb32-143"><a href="#cb32-143" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(</span>
+<span id="cb32-144"><a href="#cb32-144" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_salary =</span> <span class="fu">mean</span>(salary),</span>
+<span id="cb32-145"><a href="#cb32-145" aria-hidden="true" tabindex="-1"></a>    <span class="at">median_salary =</span> <span class="fu">median</span>(salary),</span>
+<span id="cb32-146"><a href="#cb32-146" aria-hidden="true" tabindex="-1"></a>    <span class="at">total_fte =</span> <span class="fu">sum</span>(fte),</span>
+<span id="cb32-147"><a href="#cb32-147" aria-hidden="true" tabindex="-1"></a>    <span class="at">headcount =</span> <span class="fu">n</span>()</span>
+<span id="cb32-148"><a href="#cb32-148" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb32-149"><a href="#cb32-149" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-150"><a href="#cb32-150" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-151"><a href="#cb32-151" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-152"><a href="#cb32-152" aria-hidden="true" tabindex="-1"></a><span class="fu">### Custom Aggregation Functions</span></span>
+<span id="cb32-153"><a href="#cb32-153" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-154"><a href="#cb32-154" aria-hidden="true" tabindex="-1"></a>You can use custom functions or lambdas:</span>
+<span id="cb32-155"><a href="#cb32-155" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-158"><a href="#cb32-158" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-159"><a href="#cb32-159" aria-hidden="true" tabindex="-1"></a><span class="co"># Range (max - min)</span></span>
+<span id="cb32-160"><a href="#cb32-160" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg(<span class="kw">lambda</span> x: x.<span class="bu">max</span>() <span class="op">-</span> x.<span class="bu">min</span>())</span>
+<span id="cb32-161"><a href="#cb32-161" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-162"><a href="#cb32-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-165"><a href="#cb32-165" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-166"><a href="#cb32-166" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple custom aggregations</span></span>
+<span id="cb32-167"><a href="#cb32-167" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> salary_range(x):</span>
+<span id="cb32-168"><a href="#cb32-168" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.<span class="bu">max</span>() <span class="op">-</span> x.<span class="bu">min</span>()</span>
+<span id="cb32-169"><a href="#cb32-169" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-170"><a href="#cb32-170" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> coefficient_of_variation(x):</span>
+<span id="cb32-171"><a href="#cb32-171" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.std() <span class="op">/</span> x.mean() <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb32-172"><a href="#cb32-172" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-173"><a href="#cb32-173" aria-hidden="true" tabindex="-1"></a>df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].agg([</span>
+<span id="cb32-174"><a href="#cb32-174" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"range"</span>, salary_range),</span>
+<span id="cb32-175"><a href="#cb32-175" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"cv_percent"</span>, coefficient_of_variation)</span>
+<span id="cb32-176"><a href="#cb32-176" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="cb32-177"><a href="#cb32-177" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-178"><a href="#cb32-178" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-179"><a href="#cb32-179" aria-hidden="true" tabindex="-1"></a><span class="fu">## Pivot Tables</span></span>
+<span id="cb32-180"><a href="#cb32-180" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-181"><a href="#cb32-181" aria-hidden="true" tabindex="-1"></a>Pivot tables reshape data from long to wide format, similar to Excel pivot tables:</span>
+<span id="cb32-182"><a href="#cb32-182" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-185"><a href="#cb32-185" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-186"><a href="#cb32-186" aria-hidden="true" tabindex="-1"></a><span class="co"># Create pivot table: rows=division, columns=date, values=salary mean</span></span>
+<span id="cb32-187"><a href="#cb32-187" aria-hidden="true" tabindex="-1"></a>pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-188"><a href="#cb32-188" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb32-189"><a href="#cb32-189" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-190"><a href="#cb32-190" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-191"><a href="#cb32-191" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span></span>
+<span id="cb32-192"><a href="#cb32-192" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-193"><a href="#cb32-193" aria-hidden="true" tabindex="-1"></a>pivot</span>
+<span id="cb32-194"><a href="#cb32-194" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-195"><a href="#cb32-195" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-196"><a href="#cb32-196" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-197"><a href="#cb32-197" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-198"><a href="#cb32-198" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-199"><a href="#cb32-199" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-200"><a href="#cb32-200" aria-hidden="true" tabindex="-1"></a><span class="co"># tidyr approach</span></span>
+<span id="cb32-201"><a href="#cb32-201" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb32-202"><a href="#cb32-202" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division, date) <span class="sc">%&gt;%</span></span>
+<span id="cb32-203"><a href="#cb32-203" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">salary =</span> <span class="fu">mean</span>(salary)) <span class="sc">%&gt;%</span></span>
+<span id="cb32-204"><a href="#cb32-204" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> date, <span class="at">values_from =</span> salary)</span>
+<span id="cb32-205"><a href="#cb32-205" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-206"><a href="#cb32-206" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-207"><a href="#cb32-207" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-208"><a href="#cb32-208" aria-hidden="true" tabindex="-1"></a><span class="fu">### Multiple Aggregation Functions in Pivot</span></span>
+<span id="cb32-209"><a href="#cb32-209" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-212"><a href="#cb32-212" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-213"><a href="#cb32-213" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple aggregations</span></span>
+<span id="cb32-214"><a href="#cb32-214" aria-hidden="true" tabindex="-1"></a>pivot_multi <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-215"><a href="#cb32-215" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb32-216"><a href="#cb32-216" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-217"><a href="#cb32-217" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-218"><a href="#cb32-218" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span>[<span class="st">"mean"</span>, <span class="st">"count"</span>]</span>
+<span id="cb32-219"><a href="#cb32-219" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-220"><a href="#cb32-220" aria-hidden="true" tabindex="-1"></a>pivot_multi</span>
+<span id="cb32-221"><a href="#cb32-221" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-222"><a href="#cb32-222" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-223"><a href="#cb32-223" aria-hidden="true" tabindex="-1"></a><span class="fu">### Multiple Values</span></span>
+<span id="cb32-224"><a href="#cb32-224" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-227"><a href="#cb32-227" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-228"><a href="#cb32-228" aria-hidden="true" tabindex="-1"></a><span class="co"># Multiple value columns</span></span>
+<span id="cb32-229"><a href="#cb32-229" aria-hidden="true" tabindex="-1"></a>pivot_values <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-230"><a href="#cb32-230" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span>[<span class="st">"salary"</span>, <span class="st">"fte"</span>],</span>
+<span id="cb32-231"><a href="#cb32-231" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-232"><a href="#cb32-232" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-233"><a href="#cb32-233" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span></span>
+<span id="cb32-234"><a href="#cb32-234" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-235"><a href="#cb32-235" aria-hidden="true" tabindex="-1"></a>pivot_values</span>
+<span id="cb32-236"><a href="#cb32-236" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-237"><a href="#cb32-237" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-238"><a href="#cb32-238" aria-hidden="true" tabindex="-1"></a><span class="fu">### Adding Margins (Totals)</span></span>
+<span id="cb32-239"><a href="#cb32-239" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-242"><a href="#cb32-242" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-243"><a href="#cb32-243" aria-hidden="true" tabindex="-1"></a><span class="co"># Add row and column totals</span></span>
+<span id="cb32-244"><a href="#cb32-244" aria-hidden="true" tabindex="-1"></a>pivot_totals <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-245"><a href="#cb32-245" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary"</span>,</span>
+<span id="cb32-246"><a href="#cb32-246" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-247"><a href="#cb32-247" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-248"><a href="#cb32-248" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"mean"</span>,</span>
+<span id="cb32-249"><a href="#cb32-249" aria-hidden="true" tabindex="-1"></a>    margins<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb32-250"><a href="#cb32-250" aria-hidden="true" tabindex="-1"></a>    margins_name<span class="op">=</span><span class="st">"Overall"</span></span>
+<span id="cb32-251"><a href="#cb32-251" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-252"><a href="#cb32-252" aria-hidden="true" tabindex="-1"></a>pivot_totals</span>
+<span id="cb32-253"><a href="#cb32-253" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-254"><a href="#cb32-254" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-255"><a href="#cb32-255" aria-hidden="true" tabindex="-1"></a><span class="fu">## Melting Data (Wide to Long)</span></span>
+<span id="cb32-256"><a href="#cb32-256" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-257"><a href="#cb32-257" aria-hidden="true" tabindex="-1"></a><span class="in">`melt()`</span> converts wide data to long format (the opposite of pivot):</span>
+<span id="cb32-258"><a href="#cb32-258" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-261"><a href="#cb32-261" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-262"><a href="#cb32-262" aria-hidden="true" tabindex="-1"></a><span class="co"># Start with our pivot table</span></span>
+<span id="cb32-263"><a href="#cb32-263" aria-hidden="true" tabindex="-1"></a>wide_data <span class="op">=</span> pivot.reset_index()</span>
+<span id="cb32-264"><a href="#cb32-264" aria-hidden="true" tabindex="-1"></a>wide_data</span>
+<span id="cb32-265"><a href="#cb32-265" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-266"><a href="#cb32-266" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-269"><a href="#cb32-269" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-270"><a href="#cb32-270" aria-hidden="true" tabindex="-1"></a><span class="co"># Melt to long format</span></span>
+<span id="cb32-271"><a href="#cb32-271" aria-hidden="true" tabindex="-1"></a>long_data <span class="op">=</span> wide_data.melt(</span>
+<span id="cb32-272"><a href="#cb32-272" aria-hidden="true" tabindex="-1"></a>    id_vars<span class="op">=</span>[<span class="st">"division"</span>],</span>
+<span id="cb32-273"><a href="#cb32-273" aria-hidden="true" tabindex="-1"></a>    var_name<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-274"><a href="#cb32-274" aria-hidden="true" tabindex="-1"></a>    value_name<span class="op">=</span><span class="st">"avg_salary"</span></span>
+<span id="cb32-275"><a href="#cb32-275" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-276"><a href="#cb32-276" aria-hidden="true" tabindex="-1"></a>long_data</span>
+<span id="cb32-277"><a href="#cb32-277" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-278"><a href="#cb32-278" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-279"><a href="#cb32-279" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-280"><a href="#cb32-280" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-281"><a href="#cb32-281" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-282"><a href="#cb32-282" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-283"><a href="#cb32-283" aria-hidden="true" tabindex="-1"></a><span class="co"># tidyr approach</span></span>
+<span id="cb32-284"><a href="#cb32-284" aria-hidden="true" tabindex="-1"></a>wide_data <span class="sc">%&gt;%</span></span>
+<span id="cb32-285"><a href="#cb32-285" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(</span>
+<span id="cb32-286"><a href="#cb32-286" aria-hidden="true" tabindex="-1"></a>    <span class="at">cols =</span> <span class="sc">-</span>division,</span>
+<span id="cb32-287"><a href="#cb32-287" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="st">"date"</span>,</span>
+<span id="cb32-288"><a href="#cb32-288" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">"avg_salary"</span></span>
+<span id="cb32-289"><a href="#cb32-289" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb32-290"><a href="#cb32-290" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-291"><a href="#cb32-291" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-292"><a href="#cb32-292" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-293"><a href="#cb32-293" aria-hidden="true" tabindex="-1"></a><span class="fu">### Practical Example: FTE Over Time</span></span>
+<span id="cb32-294"><a href="#cb32-294" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-297"><a href="#cb32-297" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-298"><a href="#cb32-298" aria-hidden="true" tabindex="-1"></a><span class="co"># Create FTE pivot by division and date</span></span>
+<span id="cb32-299"><a href="#cb32-299" aria-hidden="true" tabindex="-1"></a>fte_pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-300"><a href="#cb32-300" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"fte"</span>,</span>
+<span id="cb32-301"><a href="#cb32-301" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-302"><a href="#cb32-302" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-303"><a href="#cb32-303" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"sum"</span></span>
+<span id="cb32-304"><a href="#cb32-304" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-305"><a href="#cb32-305" aria-hidden="true" tabindex="-1"></a>fte_pivot</span>
+<span id="cb32-306"><a href="#cb32-306" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-307"><a href="#cb32-307" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-310"><a href="#cb32-310" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-311"><a href="#cb32-311" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate change from first to last period</span></span>
+<span id="cb32-312"><a href="#cb32-312" aria-hidden="true" tabindex="-1"></a>fte_pivot[<span class="st">"change"</span>] <span class="op">=</span> fte_pivot[<span class="st">"2024-01"</span>] <span class="op">-</span> fte_pivot[<span class="st">"2023-01"</span>]</span>
+<span id="cb32-313"><a href="#cb32-313" aria-hidden="true" tabindex="-1"></a>fte_pivot[<span class="st">"pct_change"</span>] <span class="op">=</span> (fte_pivot[<span class="st">"change"</span>] <span class="op">/</span> fte_pivot[<span class="st">"2023-01"</span>] <span class="op">*</span> <span class="dv">100</span>).<span class="bu">round</span>(<span class="dv">1</span>)</span>
+<span id="cb32-314"><a href="#cb32-314" aria-hidden="true" tabindex="-1"></a>fte_pivot</span>
+<span id="cb32-315"><a href="#cb32-315" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-316"><a href="#cb32-316" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-317"><a href="#cb32-317" aria-hidden="true" tabindex="-1"></a><span class="fu">## Crosstab: Quick Frequency Tables</span></span>
+<span id="cb32-318"><a href="#cb32-318" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-319"><a href="#cb32-319" aria-hidden="true" tabindex="-1"></a><span class="in">`pd.crosstab()`</span> creates frequency tables:</span>
+<span id="cb32-320"><a href="#cb32-320" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-323"><a href="#cb32-323" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-324"><a href="#cb32-324" aria-hidden="true" tabindex="-1"></a><span class="co"># Count of employees by division and category</span></span>
+<span id="cb32-325"><a href="#cb32-325" aria-hidden="true" tabindex="-1"></a>pd.crosstab(df[<span class="st">"division"</span>], df[<span class="st">"employee_category"</span>])</span>
+<span id="cb32-326"><a href="#cb32-326" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-327"><a href="#cb32-327" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-330"><a href="#cb32-330" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-331"><a href="#cb32-331" aria-hidden="true" tabindex="-1"></a><span class="co"># With row percentages</span></span>
+<span id="cb32-332"><a href="#cb32-332" aria-hidden="true" tabindex="-1"></a>pd.crosstab(</span>
+<span id="cb32-333"><a href="#cb32-333" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"division"</span>],</span>
+<span id="cb32-334"><a href="#cb32-334" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"employee_category"</span>],</span>
+<span id="cb32-335"><a href="#cb32-335" aria-hidden="true" tabindex="-1"></a>    normalize<span class="op">=</span><span class="st">"index"</span></span>
+<span id="cb32-336"><a href="#cb32-336" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">2</span>) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb32-337"><a href="#cb32-337" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-338"><a href="#cb32-338" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-339"><a href="#cb32-339" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-340"><a href="#cb32-340" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-341"><a href="#cb32-341" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-342"><a href="#cb32-342" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-343"><a href="#cb32-343" aria-hidden="true" tabindex="-1"></a><span class="co"># Base R</span></span>
+<span id="cb32-344"><a href="#cb32-344" aria-hidden="true" tabindex="-1"></a><span class="fu">table</span>(df<span class="sc">$</span>division, df<span class="sc">$</span>employee_category)</span>
+<span id="cb32-345"><a href="#cb32-345" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-346"><a href="#cb32-346" aria-hidden="true" tabindex="-1"></a><span class="co"># Proportions</span></span>
+<span id="cb32-347"><a href="#cb32-347" aria-hidden="true" tabindex="-1"></a><span class="fu">prop.table</span>(<span class="fu">table</span>(df<span class="sc">$</span>division, df<span class="sc">$</span>employee_category), <span class="at">margin =</span> <span class="dv">1</span>)</span>
+<span id="cb32-348"><a href="#cb32-348" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-349"><a href="#cb32-349" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-350"><a href="#cb32-350" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-351"><a href="#cb32-351" aria-hidden="true" tabindex="-1"></a><span class="fu">## Transforming Groups</span></span>
+<span id="cb32-352"><a href="#cb32-352" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-353"><a href="#cb32-353" aria-hidden="true" tabindex="-1"></a>Sometimes you want to add aggregated values back to the original DataFrame:</span>
+<span id="cb32-354"><a href="#cb32-354" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-355"><a href="#cb32-355" aria-hidden="true" tabindex="-1"></a><span class="fu">### Using `transform()`</span></span>
+<span id="cb32-356"><a href="#cb32-356" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-359"><a href="#cb32-359" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-360"><a href="#cb32-360" aria-hidden="true" tabindex="-1"></a><span class="co"># Add division mean salary to each row</span></span>
+<span id="cb32-361"><a href="#cb32-361" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"division_avg_salary"</span>] <span class="op">=</span> df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].transform(<span class="st">"mean"</span>)</span>
+<span id="cb32-362"><a href="#cb32-362" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"division_avg_salary"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span>
+<span id="cb32-363"><a href="#cb32-363" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-364"><a href="#cb32-364" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-367"><a href="#cb32-367" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-368"><a href="#cb32-368" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate difference from group mean</span></span>
+<span id="cb32-369"><a href="#cb32-369" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"diff_from_avg"</span>] <span class="op">=</span> df[<span class="st">"salary"</span>] <span class="op">-</span> df[<span class="st">"division_avg_salary"</span>]</span>
+<span id="cb32-370"><a href="#cb32-370" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"division_avg_salary"</span>, <span class="st">"diff_from_avg"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span>
+<span id="cb32-371"><a href="#cb32-371" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-372"><a href="#cb32-372" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-373"><a href="#cb32-373" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip collapse="true"}</span>
+<span id="cb32-374"><a href="#cb32-374" aria-hidden="true" tabindex="-1"></a><span class="fu">## In R</span></span>
+<span id="cb32-375"><a href="#cb32-375" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-376"><a href="#cb32-376" aria-hidden="true" tabindex="-1"></a><span class="in">```r</span></span>
+<span id="cb32-377"><a href="#cb32-377" aria-hidden="true" tabindex="-1"></a><span class="co"># dplyr mutate with group</span></span>
+<span id="cb32-378"><a href="#cb32-378" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb32-379"><a href="#cb32-379" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(division) <span class="sc">%&gt;%</span></span>
+<span id="cb32-380"><a href="#cb32-380" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb32-381"><a href="#cb32-381" aria-hidden="true" tabindex="-1"></a>    <span class="at">division_avg_salary =</span> <span class="fu">mean</span>(salary),</span>
+<span id="cb32-382"><a href="#cb32-382" aria-hidden="true" tabindex="-1"></a>    <span class="at">diff_from_avg =</span> salary <span class="sc">-</span> division_avg_salary</span>
+<span id="cb32-383"><a href="#cb32-383" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb32-384"><a href="#cb32-384" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-385"><a href="#cb32-385" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-386"><a href="#cb32-386" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-387"><a href="#cb32-387" aria-hidden="true" tabindex="-1"></a><span class="fu">### Calculating Percentiles Within Groups</span></span>
+<span id="cb32-388"><a href="#cb32-388" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-391"><a href="#cb32-391" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-392"><a href="#cb32-392" aria-hidden="true" tabindex="-1"></a><span class="co"># Add salary percentile within division</span></span>
+<span id="cb32-393"><a href="#cb32-393" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"salary_pctile"</span>] <span class="op">=</span> df.groupby(<span class="st">"division"</span>)[<span class="st">"salary"</span>].transform(</span>
+<span id="cb32-394"><a href="#cb32-394" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> x: x.rank(pct<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb32-395"><a href="#cb32-395" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-396"><a href="#cb32-396" aria-hidden="true" tabindex="-1"></a>df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"salary"</span>, <span class="st">"salary_pctile"</span>]].drop_duplicates(<span class="st">"last_name"</span>)</span>
+<span id="cb32-397"><a href="#cb32-397" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-398"><a href="#cb32-398" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-399"><a href="#cb32-399" aria-hidden="true" tabindex="-1"></a><span class="fu">## Combining Operations</span></span>
+<span id="cb32-400"><a href="#cb32-400" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-401"><a href="#cb32-401" aria-hidden="true" tabindex="-1"></a>A complete analysis often chains multiple operations:</span>
+<span id="cb32-402"><a href="#cb32-402" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-405"><a href="#cb32-405" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-406"><a href="#cb32-406" aria-hidden="true" tabindex="-1"></a><span class="co"># Complete analysis pipeline</span></span>
+<span id="cb32-407"><a href="#cb32-407" aria-hidden="true" tabindex="-1"></a>analysis <span class="op">=</span> (</span>
+<span id="cb32-408"><a href="#cb32-408" aria-hidden="true" tabindex="-1"></a>    df</span>
+<span id="cb32-409"><a href="#cb32-409" aria-hidden="true" tabindex="-1"></a>    .groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])</span>
+<span id="cb32-410"><a href="#cb32-410" aria-hidden="true" tabindex="-1"></a>    .agg(</span>
+<span id="cb32-411"><a href="#cb32-411" aria-hidden="true" tabindex="-1"></a>        total_salary<span class="op">=</span>(<span class="st">"salary"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb32-412"><a href="#cb32-412" aria-hidden="true" tabindex="-1"></a>        total_fte<span class="op">=</span>(<span class="st">"fte"</span>, <span class="st">"sum"</span>),</span>
+<span id="cb32-413"><a href="#cb32-413" aria-hidden="true" tabindex="-1"></a>        headcount<span class="op">=</span>(<span class="st">"employee_id"</span>, <span class="st">"count"</span>)</span>
+<span id="cb32-414"><a href="#cb32-414" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb32-415"><a href="#cb32-415" aria-hidden="true" tabindex="-1"></a>    .reset_index()</span>
+<span id="cb32-416"><a href="#cb32-416" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-417"><a href="#cb32-417" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-418"><a href="#cb32-418" aria-hidden="true" tabindex="-1"></a><span class="co"># Add calculated column</span></span>
+<span id="cb32-419"><a href="#cb32-419" aria-hidden="true" tabindex="-1"></a>analysis[<span class="st">"salary_per_fte"</span>] <span class="op">=</span> analysis[<span class="st">"total_salary"</span>] <span class="op">/</span> analysis[<span class="st">"total_fte"</span>]</span>
+<span id="cb32-420"><a href="#cb32-420" aria-hidden="true" tabindex="-1"></a>analysis</span>
+<span id="cb32-421"><a href="#cb32-421" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-422"><a href="#cb32-422" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-425"><a href="#cb32-425" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-426"><a href="#cb32-426" aria-hidden="true" tabindex="-1"></a><span class="co"># Pivot for time comparison</span></span>
+<span id="cb32-427"><a href="#cb32-427" aria-hidden="true" tabindex="-1"></a>time_comparison <span class="op">=</span> analysis.pivot_table(</span>
+<span id="cb32-428"><a href="#cb32-428" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"salary_per_fte"</span>,</span>
+<span id="cb32-429"><a href="#cb32-429" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-430"><a href="#cb32-430" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span></span>
+<span id="cb32-431"><a href="#cb32-431" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-432"><a href="#cb32-432" aria-hidden="true" tabindex="-1"></a>time_comparison</span>
+<span id="cb32-433"><a href="#cb32-433" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-434"><a href="#cb32-434" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-435"><a href="#cb32-435" aria-hidden="true" tabindex="-1"></a><span class="fu">## Quick Reference</span></span>
+<span id="cb32-436"><a href="#cb32-436" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-437"><a href="#cb32-437" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Task <span class="pp">|</span> pandas <span class="pp">|</span> dplyr/tidyr <span class="pp">|</span></span>
+<span id="cb32-438"><a href="#cb32-438" aria-hidden="true" tabindex="-1"></a><span class="pp">|------|--------|-------------|</span></span>
+<span id="cb32-439"><a href="#cb32-439" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Group and summarize <span class="pp">|</span> <span class="in">`df.groupby("col").agg(...)`</span> <span class="pp">|</span> <span class="in">`group_by() %&gt;% summarize()`</span> <span class="pp">|</span></span>
+<span id="cb32-440"><a href="#cb32-440" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Multiple agg functions <span class="pp">|</span> <span class="in">`agg(["mean", "sum"])`</span> <span class="pp">|</span> <span class="in">`summarize(m=mean(), s=sum())`</span> <span class="pp">|</span></span>
+<span id="cb32-441"><a href="#cb32-441" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Named aggregations <span class="pp">|</span> <span class="in">`agg(name=("col", "func"))`</span> <span class="pp">|</span> <span class="in">`summarize(name = func(col))`</span> <span class="pp">|</span></span>
+<span id="cb32-442"><a href="#cb32-442" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Pivot to wide <span class="pp">|</span> <span class="in">`pivot_table()`</span> <span class="pp">|</span> <span class="in">`pivot_wider()`</span> <span class="pp">|</span></span>
+<span id="cb32-443"><a href="#cb32-443" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Melt to long <span class="pp">|</span> <span class="in">`melt()`</span> <span class="pp">|</span> <span class="in">`pivot_longer()`</span> <span class="pp">|</span></span>
+<span id="cb32-444"><a href="#cb32-444" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Frequency table <span class="pp">|</span> <span class="in">`pd.crosstab()`</span> <span class="pp">|</span> <span class="in">`table()`</span> or <span class="in">`count()`</span> <span class="pp">|</span></span>
+<span id="cb32-445"><a href="#cb32-445" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Add group stat <span class="pp">|</span> <span class="in">`transform()`</span> <span class="pp">|</span> <span class="in">`mutate()`</span> with grouped df <span class="pp">|</span></span>
+<span id="cb32-446"><a href="#cb32-446" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-447"><a href="#cb32-447" aria-hidden="true" tabindex="-1"></a><span class="fu">## Exercise {#exercise}</span></span>
+<span id="cb32-448"><a href="#cb32-448" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-449"><a href="#cb32-449" aria-hidden="true" tabindex="-1"></a>::: {.exercise-box}</span>
+<span id="cb32-450"><a href="#cb32-450" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Exercise 5: Salary Aggregations</span></span>
+<span id="cb32-451"><a href="#cb32-451" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-452"><a href="#cb32-452" aria-hidden="true" tabindex="-1"></a>Using the sample salary data:</span>
+<span id="cb32-453"><a href="#cb32-453" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-454"><a href="#cb32-454" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>Calculate the mean, median, and max salary for each employee category</span>
+<span id="cb32-455"><a href="#cb32-455" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>Create a pivot table showing total FTE by division (rows) and date (columns)</span>
+<span id="cb32-456"><a href="#cb32-456" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>Calculate the total salary expenditure by division for each date</span>
+<span id="cb32-457"><a href="#cb32-457" aria-hidden="true" tabindex="-1"></a><span class="ss">4. </span>For each employee, calculate their salary as a percentage of their division's total</span>
+<span id="cb32-458"><a href="#cb32-458" aria-hidden="true" tabindex="-1"></a><span class="ss">5. </span>Create a crosstab showing the count of employees by division and category</span>
+<span id="cb32-459"><a href="#cb32-459" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-460"><a href="#cb32-460" aria-hidden="true" tabindex="-1"></a>::: {.callout-note collapse="true"}</span>
+<span id="cb32-461"><a href="#cb32-461" aria-hidden="true" tabindex="-1"></a><span class="fu">## Solution</span></span>
+<span id="cb32-462"><a href="#cb32-462" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-465"><a href="#cb32-465" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb32-466"><a href="#cb32-466" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Salary statistics by employee category</span></span>
+<span id="cb32-467"><a href="#cb32-467" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"1. Salary statistics by category:"</span>)</span>
+<span id="cb32-468"><a href="#cb32-468" aria-hidden="true" tabindex="-1"></a>category_stats <span class="op">=</span> df.groupby(<span class="st">"employee_category"</span>)[<span class="st">"salary"</span>].agg(</span>
+<span id="cb32-469"><a href="#cb32-469" aria-hidden="true" tabindex="-1"></a>    [<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"max"</span>]</span>
+<span id="cb32-470"><a href="#cb32-470" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">0</span>)</span>
+<span id="cb32-471"><a href="#cb32-471" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(category_stats)</span>
+<span id="cb32-472"><a href="#cb32-472" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-473"><a href="#cb32-473" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. FTE pivot table</span></span>
+<span id="cb32-474"><a href="#cb32-474" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">2. FTE by division and date:"</span>)</span>
+<span id="cb32-475"><a href="#cb32-475" aria-hidden="true" tabindex="-1"></a>fte_pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb32-476"><a href="#cb32-476" aria-hidden="true" tabindex="-1"></a>    values<span class="op">=</span><span class="st">"fte"</span>,</span>
+<span id="cb32-477"><a href="#cb32-477" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span><span class="st">"division"</span>,</span>
+<span id="cb32-478"><a href="#cb32-478" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="st">"date"</span>,</span>
+<span id="cb32-479"><a href="#cb32-479" aria-hidden="true" tabindex="-1"></a>    aggfunc<span class="op">=</span><span class="st">"sum"</span></span>
+<span id="cb32-480"><a href="#cb32-480" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb32-481"><a href="#cb32-481" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fte_pivot)</span>
+<span id="cb32-482"><a href="#cb32-482" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-483"><a href="#cb32-483" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Total salary by division and date</span></span>
+<span id="cb32-484"><a href="#cb32-484" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">3. Total salary expenditure:"</span>)</span>
+<span id="cb32-485"><a href="#cb32-485" aria-hidden="true" tabindex="-1"></a>salary_total <span class="op">=</span> df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].<span class="bu">sum</span>().reset_index()</span>
+<span id="cb32-486"><a href="#cb32-486" aria-hidden="true" tabindex="-1"></a>salary_pivot <span class="op">=</span> salary_total.pivot(index<span class="op">=</span><span class="st">"division"</span>, columns<span class="op">=</span><span class="st">"date"</span>, values<span class="op">=</span><span class="st">"salary"</span>)</span>
+<span id="cb32-487"><a href="#cb32-487" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(salary_pivot)</span>
+<span id="cb32-488"><a href="#cb32-488" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-489"><a href="#cb32-489" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Salary as percentage of division total</span></span>
+<span id="cb32-490"><a href="#cb32-490" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">4. Salary as </span><span class="sc">% o</span><span class="st">f division total:"</span>)</span>
+<span id="cb32-491"><a href="#cb32-491" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"division_total"</span>] <span class="op">=</span> df.groupby([<span class="st">"division"</span>, <span class="st">"date"</span>])[<span class="st">"salary"</span>].transform(<span class="st">"sum"</span>)</span>
+<span id="cb32-492"><a href="#cb32-492" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"pct_of_division"</span>] <span class="op">=</span> (df[<span class="st">"salary"</span>] <span class="op">/</span> df[<span class="st">"division_total"</span>] <span class="op">*</span> <span class="dv">100</span>).<span class="bu">round</span>(<span class="dv">1</span>)</span>
+<span id="cb32-493"><a href="#cb32-493" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df[[<span class="st">"last_name"</span>, <span class="st">"division"</span>, <span class="st">"date"</span>, <span class="st">"salary"</span>, <span class="st">"pct_of_division"</span>]].head(<span class="dv">10</span>))</span>
+<span id="cb32-494"><a href="#cb32-494" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-495"><a href="#cb32-495" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Crosstab</span></span>
+<span id="cb32-496"><a href="#cb32-496" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">5. Employee count by division and category:"</span>)</span>
+<span id="cb32-497"><a href="#cb32-497" aria-hidden="true" tabindex="-1"></a>crosstab <span class="op">=</span> pd.crosstab(df[<span class="st">"division"</span>], df[<span class="st">"employee_category"</span>])</span>
+<span id="cb32-498"><a href="#cb32-498" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(crosstab)</span>
+<span id="cb32-499"><a href="#cb32-499" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb32-500"><a href="#cb32-500" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-501"><a href="#cb32-501" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb32-502"><a href="#cb32-502" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-503"><a href="#cb32-503" aria-hidden="true" tabindex="-1"></a><span class="fu">## Summary</span></span>
+<span id="cb32-504"><a href="#cb32-504" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-505"><a href="#cb32-505" aria-hidden="true" tabindex="-1"></a>You've learned the core data transformation operations:</span>
+<span id="cb32-506"><a href="#cb32-506" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-507"><a href="#cb32-507" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`groupby()`**: Split-apply-combine pattern for aggregation</span>
+<span id="cb32-508"><a href="#cb32-508" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`agg()`**: Apply multiple aggregation functions at once</span>
+<span id="cb32-509"><a href="#cb32-509" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`pivot_table()`**: Reshape from long to wide format</span>
+<span id="cb32-510"><a href="#cb32-510" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`melt()`**: Reshape from wide to long format</span>
+<span id="cb32-511"><a href="#cb32-511" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`transform()`**: Add aggregated values back to original data</span>
+<span id="cb32-512"><a href="#cb32-512" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`crosstab()`**: Quick frequency tables</span>
+<span id="cb32-513"><a href="#cb32-513" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-514"><a href="#cb32-514" aria-hidden="true" tabindex="-1"></a>Key differences from R:</span>
+<span id="cb32-515"><a href="#cb32-515" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>pandas uses <span class="in">`groupby().agg()`</span> instead of <span class="in">`group_by() %&gt;% summarize()`</span></span>
+<span id="cb32-516"><a href="#cb32-516" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Column selection syntax: <span class="in">`df.groupby("g")["col"]`</span> vs <span class="in">`summarize(col = func(col))`</span></span>
+<span id="cb32-517"><a href="#cb32-517" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`pivot_table()`</span> is more powerful than <span class="in">`pivot_wider()`</span> with built-in aggregation</span>
+<span id="cb32-518"><a href="#cb32-518" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-519"><a href="#cb32-519" aria-hidden="true" tabindex="-1"></a><span class="fu">## Next Steps</span></span>
+<span id="cb32-520"><a href="#cb32-520" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-521"><a href="#cb32-521" aria-hidden="true" tabindex="-1"></a>Continue to <span class="co">[</span><span class="ot">Lesson 6: Joining and Merging Data</span><span class="co">](06-joining-merging.qmd)</span> to learn how to combine multiple DataFrames.</span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Built with <a href="https://quarto.org/">Quarto</a> | Data: UW-Madison Public Salary Records</p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/mjzenz/wi-public-finance/edit/main/lessons/05-reshaping-aggregation.qmd" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mjzenz/wi-public-finance/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

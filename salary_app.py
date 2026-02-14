@@ -173,19 +173,24 @@ def calculate_peer_comparison(df, employee_id, jobcode, division, current_salary
     Calculate percentile ranks for salary and growth compared to peers.
 
     Returns dict with comparison stats for department, division-title, and university-title.
+    Also returns the comparison date (employee's last available date) for display purposes.
     """
-    # Get current employee info
-    emp_current = df[(df['id'] == employee_id) & (df['Date'] == df['Date'].max())].iloc[0]
-    dept = emp_current['division_department']
-    latest_date = df['Date'].max()
+    # Get employee's most recent record (may not be latest date in dataset)
+    emp_records = df[df['id'] == employee_id].sort_values('Date')
+    if len(emp_records) == 0:
+        return {}, None
 
-    # Get latest data for all employees
-    latest_df = df[df['Date'] == latest_date]
+    emp_current = emp_records.iloc[-1]
+    emp_last_date = emp_current['Date']
+    dept = emp_current['division_department']
+
+    # Compare against peers from the same date as the employee's last record
+    peers_df = df[df['Date'] == emp_last_date]
 
     comparisons = {}
 
     # 1. Department comparison (all employees in same department)
-    dept_peers = latest_df[latest_df['division_department'] == dept]
+    dept_peers = peers_df[peers_df['division_department'] == dept]
     if len(dept_peers) > 1:
         dept_salaries = dept_peers['current_annual_contracted_salary'].dropna()
         salary_percentile = (dept_salaries < current_salary).sum() / len(dept_salaries) * 100
@@ -199,7 +204,7 @@ def calculate_peer_comparison(df, employee_id, jobcode, division, current_salary
         }
 
     # 2. Division + Title comparison (same job code within division)
-    div_title_peers = latest_df[(latest_df['division'] == division) & (latest_df['jobcode'] == jobcode)]
+    div_title_peers = peers_df[(peers_df['division'] == division) & (peers_df['jobcode'] == jobcode)]
     if len(div_title_peers) > 1:
         div_salaries = div_title_peers['current_annual_contracted_salary'].dropna()
         salary_percentile = (div_salaries < current_salary).sum() / len(div_salaries) * 100
@@ -213,7 +218,7 @@ def calculate_peer_comparison(df, employee_id, jobcode, division, current_salary
         }
 
     # 3. University-wide title comparison (same job code across university)
-    univ_title_peers = latest_df[latest_df['jobcode'] == jobcode]
+    univ_title_peers = peers_df[peers_df['jobcode'] == jobcode]
     if len(univ_title_peers) > 1:
         univ_salaries = univ_title_peers['current_annual_contracted_salary'].dropna()
         salary_percentile = (univ_salaries < current_salary).sum() / len(univ_salaries) * 100
@@ -226,15 +231,22 @@ def calculate_peer_comparison(df, employee_id, jobcode, division, current_salary
             'salaries': univ_salaries.tolist()
         }
 
-    return comparisons
+    return comparisons, emp_last_date
 
 
 def render_search_page(df):
     """Render the employee search page."""
     st.header("Employee Search")
 
-    # Use only latest data for dropdowns
+    # Get latest date for reference
     latest_date = df['Date'].max()
+
+    # Create "all employees" DataFrame with each person's most recent record
+    all_employees = df.sort_values('Date').drop_duplicates(subset=['id'], keep='last').copy()
+    all_employees['last_seen_date'] = all_employees['Date']
+    all_employees['is_current'] = all_employees['Date'] == latest_date
+
+    # Use only latest data for dropdowns (per user preference - less cluttered)
     latest_df = df[df['Date'] == latest_date]
 
     col1, col2 = st.columns(2)
@@ -256,8 +268,8 @@ def render_search_page(df):
             depts = [''] + sorted(latest_df['department'].dropna().unique().tolist())
         department = st.selectbox("Department", depts, key="search_department")
 
-    # Filter based on search criteria
-    results = latest_df.copy()
+    # Filter based on search criteria - search against all_employees, not just latest
+    results = all_employees.copy()
 
     if first_name:
         results = results[results['first_name'].str.lower().str.contains(first_name.lower(), na=False)]
@@ -275,16 +287,21 @@ def render_search_page(df):
         if len(results) > 0:
             # Create display dataframe
             display_df = results[['first_name', 'last_name', 'title', 'division',
-                                  'department', 'current_annual_contracted_salary', 'id']].copy()
+                                  'department', 'current_annual_contracted_salary', 'id',
+                                  'is_current', 'last_seen_date']].copy()
             display_df.columns = ['First Name', 'Last Name', 'Title', 'Division',
-                                  'Department', 'Salary', 'ID']
+                                  'Department', 'Salary', 'ID', 'is_current', 'last_seen_date']
             display_df['Salary'] = display_df['Salary'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "")
 
             # Show as clickable table
             for idx, row in display_df.iterrows():
                 col1, col2, col3, col4 = st.columns([2, 3, 2, 1])
                 with col1:
-                    st.write(f"**{row['First Name']} {row['Last Name']}**")
+                    name_text = f"**{row['First Name']} {row['Last Name']}**"
+                    if not row['is_current']:
+                        last_seen = row['last_seen_date'].strftime('%B %Y')
+                        name_text += f"  \n*Last seen: {last_seen}*"
+                    st.markdown(name_text)
                 with col2:
                     st.write(f"{row['Title']}")
                 with col3:
@@ -316,17 +333,26 @@ def render_individual_page(df):
         st.error("Employee not found.")
         return
 
-    # Get current (latest) record
+    # Get current (latest) record for this employee
     current = emp_data.iloc[-1]
+
+    # Check if employee is in the latest data
+    latest_date = df['Date'].max()
+    emp_last_date = current['Date']
+    is_current_employee = emp_last_date == latest_date
 
     # Header with employee name
     st.header(f"{current['first_name']} {current['last_name']}")
+
+    # Show "Last seen" indicator for former employees
+    if not is_current_employee:
+        st.warning(f"Former employee - Last seen: {emp_last_date.strftime('%B %Y')}")
 
     # Basic info section
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Current Salary", f"${current['current_annual_contracted_salary']:,.0f}")
+        st.metric("Annual Contracted Salary", f"${current['current_annual_contracted_salary']:,.0f}")
         st.write(f"**Title:** {current['title']}")
         st.write(f"**Job Code:** {current['jobcode']}")
 
@@ -353,6 +379,7 @@ def render_individual_page(df):
 
     # Salary History Charts
     st.subheader("Salary History")
+    st.caption("Charts show annual contracted salary (not FTE-adjusted). Dotted lines show median for job title.")
 
     # Colorblind-friendly palette (Wong palette)
     COLORBLIND_PALETTE = [
@@ -366,8 +393,9 @@ def render_individual_page(df):
     ]
 
     # Prepare chart data with title info
+    # Using Real_Salary_2021_Dollars (non-FTE-adjusted) for consistent comparison with nominal
     chart_data = emp_data[['Date', 'current_annual_contracted_salary',
-                           'FTE_Adjusted_Salary_2021_Dollars', 'title', 'jobcode']].copy()
+                           'Real_Salary_2021_Dollars', 'title', 'jobcode']].copy()
     chart_data = chart_data.sort_values('Date')
 
     # Get unique jobcodes and assign colors (use jobcode for change detection, not title description)
@@ -390,7 +418,7 @@ def render_individual_page(df):
         jc_data = df[(df['jobcode'] == jc) & (df['Date'] == dt)]
         if len(jc_data) > 0:
             chart_data.loc[idx, 'Median Nominal'] = jc_data['current_annual_contracted_salary'].median()
-            chart_data.loc[idx, 'Median Real'] = jc_data['FTE_Adjusted_Salary_2021_Dollars'].median()
+            chart_data.loc[idx, 'Median Real'] = jc_data['Real_Salary_2021_Dollars'].median()
 
     # Create side-by-side charts
     col1, col2 = st.columns(2)
@@ -465,7 +493,7 @@ def render_individual_page(df):
                         ))
 
         fig_nominal.update_layout(
-            title='Nominal Salary Over Time',
+            title='Contracted Salary (Nominal)',
             yaxis_tickformat='$,.0f',
             xaxis_title='Year',
             legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=10)),
@@ -487,7 +515,7 @@ def render_individual_page(df):
 
             # Add marker for this point
             fig_real.add_trace(go.Scatter(
-                x=[row['Date']], y=[row['FTE_Adjusted_Salary_2021_Dollars']],
+                x=[row['Date']], y=[row['Real_Salary_2021_Dollars']],
                 mode='markers',
                 name=jobcode_labels[jc] if show_legend else None,
                 marker=dict(color=color, size=10),
@@ -501,7 +529,7 @@ def render_individual_page(df):
                 next_row = chart_data.iloc[i + 1]
                 fig_real.add_trace(go.Scatter(
                     x=[row['Date'], next_row['Date']],
-                    y=[row['FTE_Adjusted_Salary_2021_Dollars'], next_row['FTE_Adjusted_Salary_2021_Dollars']],
+                    y=[row['Real_Salary_2021_Dollars'], next_row['Real_Salary_2021_Dollars']],
                     mode='lines',
                     line=dict(color=color, width=2),
                     legendgroup=jc,
@@ -543,7 +571,7 @@ def render_individual_page(df):
                         ))
 
         fig_real.update_layout(
-            title='Real Salary (2021 Dollars)',
+            title='Contracted Salary (2021 Dollars)',
             yaxis_tickformat='$,.0f',
             xaxis_title='Year',
             legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=10)),
@@ -554,8 +582,8 @@ def render_individual_page(df):
     # Calculate overall salary changes (first to current, all positions)
     first_nominal = chart_data.iloc[0]['current_annual_contracted_salary']
     current_nominal = chart_data.iloc[-1]['current_annual_contracted_salary']
-    first_real = chart_data.iloc[0]['FTE_Adjusted_Salary_2021_Dollars']
-    current_real = chart_data.iloc[-1]['FTE_Adjusted_Salary_2021_Dollars']
+    first_real = chart_data.iloc[0]['Real_Salary_2021_Dollars']
+    current_real = chart_data.iloc[-1]['Real_Salary_2021_Dollars']
 
     if first_nominal > 0:
         pct_nominal_change = ((current_nominal - first_nominal) / first_nominal) * 100
@@ -568,7 +596,7 @@ def render_individual_page(df):
         pct_real_change = None
 
     # Display overall salary changes
-    st.markdown("**Overall Salary Change (All Positions)**")
+    st.markdown("**Overall Contracted Salary Change (All Positions)**")
     col1, col2 = st.columns(2)
     with col1:
         if pct_nominal_change is not None:
@@ -583,6 +611,7 @@ def render_individual_page(df):
 
     # Salary Growth in Current Division
     st.subheader("Salary Growth")
+    st.caption("Based on annual contracted salary (nominal dollars).")
 
     current_division = current['division']
     pct_growth, dollar_growth, first_salary, curr_salary, first_date = calculate_growth_in_division(
@@ -605,10 +634,15 @@ def render_individual_page(df):
     # Peer Comparisons
     st.subheader("Peer Comparisons")
 
-    comparisons = calculate_peer_comparison(
+    comparisons, comparison_date = calculate_peer_comparison(
         df, employee_id, current['jobcode'], current['division'],
         current['current_annual_contracted_salary'], pct_growth
     )
+
+    # Check if employee is in latest data - if not, show info note
+    latest_date = df['Date'].max()
+    if comparison_date is not None and comparison_date != latest_date:
+        st.info(f"Note: Peer comparisons are based on data from {comparison_date.strftime('%B %Y')} (last available record).")
 
     if comparisons:
         tabs = st.tabs(list(comparisons.keys()))
@@ -737,23 +771,7 @@ def render_department_page(df):
         display_df = dept_df[available_cols].copy()
         display_df = display_df.rename(columns={c: display_cols[c] for c in available_cols})
 
-        # Format columns
-        if 'Current Salary' in display_df.columns:
-            display_df['Current Salary'] = display_df['Current Salary'].apply(
-                lambda x: f"${x:,.0f}" if pd.notna(x) else ""
-            )
-        if 'Growth %' in display_df.columns:
-            display_df['Growth %'] = display_df['Growth %'].apply(
-                lambda x: f"{x:+.1f}%" if pd.notna(x) else ""
-            )
-        if 'Growth $' in display_df.columns:
-            display_df['Growth $'] = display_df['Growth $'].apply(
-                lambda x: f"${x:+,.0f}" if pd.notna(x) else ""
-            )
-        if 'FTE' in display_df.columns:
-            display_df['FTE'] = display_df['FTE'].apply(
-                lambda x: f"{x:.2f}" if pd.notna(x) else ""
-            )
+        # Format non-numeric columns (numeric columns use column_config for sortable formatting)
         if 'Supervisory' in display_df.columns:
             display_df['Supervisory'] = display_df['Supervisory'].apply(
                 lambda x: x if pd.notna(x) and x != '' else ""
@@ -770,11 +788,21 @@ def render_department_page(df):
         else:
             ids = None
 
+        # Configure column formatting (keeps numeric data sortable)
+        # Uses printf-style format strings with % as placeholder
+        column_config = {
+            'Current Salary': st.column_config.NumberColumn(format="$ %.0f"),
+            'Growth %': st.column_config.NumberColumn(format="%.1f %%"),
+            'Growth $': st.column_config.NumberColumn(format="$ %.0f"),
+            'FTE': st.column_config.NumberColumn(format="%.2f"),
+        }
+
         # Display as interactive dataframe
         st.dataframe(
             display_df,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config=column_config
         )
 
         # Summary statistics

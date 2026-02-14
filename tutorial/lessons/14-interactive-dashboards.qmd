@@ -1,0 +1,648 @@
+---
+title: "Interactive Dashboards in Quarto"
+subtitle: "Lesson 14"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Leverage Plotly's built-in interactivity (hover, zoom, selection)
+- Create Quarto dashboard layouts
+- Use tabsets and columns for organized presentation
+- Add dropdown filters with Observable JS (optional)
+- Publish interactive reports to GitHub Pages
+:::
+
+::: {.concept-box}
+#### Audience-Driven Dashboard Design
+
+Different stakeholders in higher education need different dashboards — and knowing your audience determines what you build:
+
+- **Board of Regents / System Administration**: High-level KPIs — total compensation spend, salary competitiveness vs. peers, equity gap trends, cost-per-student. Dashboards should be self-explanatory with minimal interaction required. Think value boxes and summary charts.
+- **Provost / Vice Chancellors**: College-level comparisons, budget-to-actual, year-over-year trends, scenario projections. These users want filters by division and the ability to drill from summary to detail.
+- **Department Chairs**: Their department's data — individual salary positioning, FTE allocation, vacancy rates, adjunct reliance. Detail-level tables with sorting and search are essential.
+- **HR / Compensation Analysts**: Equity dashboards with statistical controls, regression outputs, flagged outliers, and audit-ready data exports.
+
+Dashboard design also connects to the **budget request cycle**. The most impactful dashboards are released when decision-makers are actively allocating resources — typically in the spring for the next fiscal year. A compensation competitiveness dashboard released in March, when deans are building budget requests, has far more influence than the same dashboard in August after decisions are made. Timing your analysis outputs to institutional decision rhythms is a force multiplier.
+:::
+
+## Introduction
+
+Quarto combines the best of literate programming (like R Markdown) with modern web interactivity. When you embed Plotly figures in a Quarto document, they retain full interactivity in the rendered HTML.
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Create sample salary data
+np.random.seed(42)
+dates = pd.date_range("2021-01", periods=8, freq="6MS")
+divisions = ["L&S", "Medicine", "Engineering", "Business"]
+
+records = []
+for div in divisions:
+    base = {"L&S": 85000, "Medicine": 105000, "Engineering": 95000, "Business": 92000}[div]
+    for i, date in enumerate(dates):
+        records.append({
+            "date": date,
+            "division": div,
+            "median_salary": base * (1 + i * 0.025) + np.random.normal(0, 2000),
+            "headcount": np.random.randint(150, 300),
+            "total_fte": np.random.randint(120, 280)
+        })
+
+df = pd.DataFrame(records)
+df["median_salary"] = df["median_salary"].round(0)
+df.head()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+```r
+# R Markdown / Quarto with plotly
+library(plotly)
+p <- ggplot(df, aes(x = date, y = salary)) + geom_line()
+ggplotly(p)  # Makes the ggplot interactive
+```
+:::
+
+## Plotly Interactivity Features
+
+Plotly charts come with built-in interactivity that requires no additional code.
+
+### Hover Information
+
+```{python}
+fig = px.line(
+    df,
+    x="date",
+    y="median_salary",
+    color="division",
+    title="Median Salary Trends by Division",
+    labels={"median_salary": "Median Salary ($)", "date": "Date", "division": "Division"}
+)
+
+# Customize hover template
+fig.update_traces(
+    hovertemplate="<b>%{fullData.name}</b><br>" +
+                  "Date: %{x|%b %Y}<br>" +
+                  "Salary: $%{y:,.0f}<extra></extra>"
+)
+
+fig.update_layout(hovermode="x unified")
+fig.show()
+```
+
+### Zoom and Pan
+
+Users can:
+- **Box zoom**: Click and drag to select a region
+- **Pan**: Hold shift and drag
+- **Reset**: Double-click to reset view
+- **Autoscale**: Click the autoscale button in the toolbar
+
+```{python}
+# Enable range slider for time series
+fig = px.line(df, x="date", y="median_salary", color="division")
+
+fig.update_layout(
+    xaxis=dict(
+        rangeslider=dict(visible=True),
+        type="date"
+    ),
+    title="Interactive Time Series with Range Slider"
+)
+
+fig.show()
+```
+
+### Click Events and Selection
+
+```{python}
+# Scatter plot with selection capabilities
+scatter_data = df.copy()
+scatter_data["size"] = scatter_data["headcount"] / 10
+
+fig = px.scatter(
+    scatter_data,
+    x="total_fte",
+    y="median_salary",
+    color="division",
+    size="size",
+    hover_data=["date", "headcount"],
+    title="FTE vs Median Salary (click to select points)"
+)
+
+fig.update_layout(
+    dragmode="select"  # Enable box selection
+)
+
+fig.show()
+```
+
+## Quarto Dashboard Layouts
+
+Quarto provides special syntax for creating dashboard layouts. Create a new file with the `.qmd` extension and use the `dashboard` format.
+
+### Basic Dashboard Structure
+
+Create a file called `salary-dashboard.qmd`:
+
+```yaml
+---
+title: "UW Salary Dashboard"
+format:
+  dashboard:
+    orientation: columns
+    nav-buttons: [github]
+---
+```
+
+### Rows and Columns
+
+Use markdown headers to define layout:
+
+````markdown
+---
+title: "Salary Dashboard"
+format: dashboard
+---
+
+## Row {height=70%}
+
+```{{python}}
+# This chart takes 70% of vertical space
+fig = px.line(df, x="date", y="median_salary", color="division")
+fig.show()
+```
+
+## Row {height=30%}
+
+### Column
+
+```{{python}}
+# Bottom left
+fig = px.bar(df[df["date"] == df["date"].max()], x="division", y="median_salary")
+fig.show()
+```
+
+### Column
+
+```{{python}}
+# Bottom right
+fig = px.box(df, x="division", y="median_salary")
+fig.show()
+```
+````
+
+### Value Boxes
+
+Display key metrics prominently:
+
+````markdown
+## Row {height=20%}
+
+```{{python}}
+#| content: valuebox
+#| title: "Total Employees"
+dict(
+    value = f"{df['headcount'].sum():,}",
+    icon = "people",
+    color = "primary"
+)
+```
+
+```{{python}}
+#| content: valuebox
+#| title: "Avg Salary"
+dict(
+    value = f"${df['median_salary'].mean():,.0f}",
+    icon = "currency-dollar",
+    color = "success"
+)
+```
+````
+
+## Tabsets and Columns
+
+Tabsets organize content without cluttering the page:
+
+### Creating Tabsets
+
+````markdown
+::: {.panel-tabset}
+
+## Overview
+
+```{{python}}
+fig = px.line(df, x="date", y="median_salary", color="division",
+              title="All Divisions")
+fig.show()
+```
+
+## By Division
+
+```{{python}}
+fig = make_subplots(rows=2, cols=2, subplot_titles=divisions)
+for i, div in enumerate(divisions):
+    row, col = divmod(i, 2)
+    div_data = df[df["division"] == div]
+    fig.add_trace(
+        go.Scatter(x=div_data["date"], y=div_data["median_salary"], name=div),
+        row=row+1, col=col+1
+    )
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+## Data Table
+
+```{{python}}
+from IPython.display import display
+display(df.head(20))
+```
+
+:::
+````
+
+Let's see this in action:
+
+::: {.panel-tabset}
+
+## Overview
+
+```{python}
+fig = px.line(df, x="date", y="median_salary", color="division",
+              title="Salary Trends - All Divisions")
+fig.update_layout(legend=dict(orientation="h", y=-0.2))
+fig.show()
+```
+
+## By Division
+
+```{python}
+fig = make_subplots(rows=2, cols=2, subplot_titles=divisions)
+for i, div in enumerate(divisions):
+    row, col = divmod(i, 2)
+    div_data = df[df["division"] == div]
+    fig.add_trace(
+        go.Scatter(x=div_data["date"], y=div_data["median_salary"],
+                   name=div, mode="lines+markers"),
+        row=row+1, col=col+1
+    )
+fig.update_layout(height=500, showlegend=False)
+fig.update_yaxes(tickformat="$,.0f")
+fig.show()
+```
+
+## Summary Stats
+
+```{python}
+summary = df.groupby("division").agg(
+    avg_salary=("median_salary", "mean"),
+    min_salary=("median_salary", "min"),
+    max_salary=("median_salary", "max"),
+    total_headcount=("headcount", "sum")
+).round(0)
+
+summary
+```
+
+:::
+
+### Multi-Column Layouts
+
+```{python}
+#| layout-ncol: 2
+
+# Left column
+fig1 = px.bar(
+    df[df["date"] == df["date"].max()],
+    x="division",
+    y="median_salary",
+    title="Current Median Salaries",
+    color="division"
+)
+fig1.update_layout(showlegend=False)
+fig1.show()
+
+# Right column
+fig2 = px.pie(
+    df[df["date"] == df["date"].max()],
+    values="headcount",
+    names="division",
+    title="Headcount Distribution"
+)
+fig2.show()
+```
+
+## Adding Filters (Observable JS)
+
+For truly interactive dashboards, you can add filters using Observable JS (ojs). This requires no server—it runs in the browser.
+
+### Basic Dropdown Filter
+
+````markdown
+```{{ojs}}
+//| echo: false
+viewof selected_division = Inputs.select(
+  ["All", "L&S", "Medicine", "Engineering", "Business"],
+  {label: "Select Division:", value: "All"}
+)
+```
+
+```{{ojs}}
+//| echo: false
+filtered_data = {
+  const data = transpose(salary_data);
+  if (selected_division === "All") return data;
+  return data.filter(d => d.division === selected_division);
+}
+```
+
+```{{python}}
+#| output: false
+# Make data available to OJS
+ojs_define(salary_data = df.to_dict('records'))
+```
+````
+
+### Linked Charts with OJS
+
+````markdown
+```{{ojs}}
+//| echo: false
+
+// Division selector
+viewof division = Inputs.select(
+  ["All Divisions", ...new Set(salary_data.map(d => d.division))],
+  {label: "Division:"}
+)
+
+// Date range slider
+viewof date_range = Inputs.range(
+  [new Date("2021-01-01"), new Date("2024-07-01")],
+  {step: 86400000 * 30, label: "Date Range:"}
+)
+```
+````
+
+::: {.pycharm-tip}
+When working with OJS in Quarto, use PyCharm's split view to see your code and `quarto preview` output side-by-side. The preview will hot-reload as you save changes.
+:::
+
+## Creating Interactive Tables
+
+For searchable, sortable tables, use the `itables` library:
+
+```{python}
+#| eval: false
+# Install: pip install itables
+from itables import show
+
+# Display interactive table
+show(df, scrollY="300px", scrollCollapse=True, paging=False)
+```
+
+Or use Quarto's built-in table formatting:
+
+```{python}
+# Create a formatted summary table
+latest = df[df["date"] == df["date"].max()].copy()
+latest["median_salary"] = latest["median_salary"].apply(lambda x: f"${x:,.0f}")
+latest["date"] = latest["date"].dt.strftime("%b %Y")
+
+latest[["division", "date", "median_salary", "headcount", "total_fte"]]
+```
+
+## Publishing to GitHub Pages
+
+### Step 1: Initialize Git Repository
+
+```bash
+git init
+git add .
+git commit -m "Initial dashboard commit"
+```
+
+### Step 2: Create GitHub Repository
+
+```bash
+gh repo create my-salary-dashboard --public --source=. --push
+```
+
+### Step 3: Publish with Quarto
+
+```bash
+quarto publish gh-pages
+```
+
+This command:
+1. Renders your Quarto project
+2. Creates/updates the `gh-pages` branch
+3. Pushes to GitHub
+4. Configures GitHub Pages automatically
+
+### Step 4: Access Your Dashboard
+
+Your dashboard will be available at:
+`https://yourusername.github.io/my-salary-dashboard/`
+
+::: {.pycharm-tip}
+Add a PyCharm run configuration for publishing:
+1. Run → Edit Configurations → Add New → Shell Script
+2. Script: `quarto publish gh-pages --no-prompt`
+3. Now you can publish with one click!
+:::
+
+### Automating with GitHub Actions
+
+Create `.github/workflows/publish.yml`:
+
+```yaml
+name: Publish Dashboard
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy plotly
+
+      - name: Setup Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Publish
+        uses: quarto-dev/quarto-actions/publish@v2
+        with:
+          target: gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 14: Build a Salary Explorer Dashboard
+
+Create a Quarto dashboard that includes:
+
+1. A tabset with "Overview" and "By Division" tabs
+2. Interactive line chart of salary trends with hover details
+3. A summary table showing key metrics by division
+4. Two-column layout comparing headcount vs FTE trends
+5. At least one value box showing a key metric
+
+::: {.callout-note collapse="true"}
+## Solution
+
+Create a file `salary-explorer.qmd`:
+
+````markdown
+---
+title: "UW Salary Explorer"
+format:
+  dashboard:
+    orientation: rows
+    theme: cosmo
+---
+
+```{{python}}
+#| include: false
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Generate sample data
+np.random.seed(42)
+dates = pd.date_range("2021-01", periods=8, freq="6MS")
+divisions = ["L&S", "Medicine", "Engineering", "Business"]
+
+records = []
+for div in divisions:
+    base = {"L&S": 85000, "Medicine": 105000, "Engineering": 95000, "Business": 92000}[div]
+    for i, date in enumerate(dates):
+        records.append({
+            "date": date,
+            "division": div,
+            "median_salary": base * (1 + i * 0.025) + np.random.normal(0, 2000),
+            "headcount": np.random.randint(150, 300),
+            "total_fte": np.random.randint(120, 280)
+        })
+
+df = pd.DataFrame(records)
+df["median_salary"] = df["median_salary"].round(0)
+```
+
+## Row {height=15%}
+
+```{{python}}
+#| content: valuebox
+#| title: "Total Headcount (Latest)"
+latest = df[df["date"] == df["date"].max()]
+dict(value=f"{latest['headcount'].sum():,}", icon="people", color="primary")
+```
+
+```{{python}}
+#| content: valuebox
+#| title: "Average Median Salary"
+dict(value=f"${latest['median_salary'].mean():,.0f}", icon="currency-dollar", color="success")
+```
+
+```{{python}}
+#| content: valuebox
+#| title: "Total FTE"
+dict(value=f"{latest['total_fte'].sum():,}", icon="briefcase", color="info")
+```
+
+## Row {height=85%}
+
+::: {.panel-tabset}
+
+### Overview
+
+```{{python}}
+fig = px.line(
+    df, x="date", y="median_salary", color="division",
+    title="Median Salary Trends by Division",
+    labels={"median_salary": "Median Salary ($)", "date": "Date"}
+)
+fig.update_traces(hovertemplate="%{y:$,.0f}")
+fig.update_layout(
+    legend=dict(orientation="h", y=-0.15),
+    hovermode="x unified"
+)
+fig.show()
+```
+
+### By Division
+
+```{{python}}
+#| layout-ncol: 2
+
+# Headcount trends
+fig1 = px.line(df, x="date", y="headcount", color="division", title="Headcount Trends")
+fig1.update_layout(showlegend=False)
+fig1.show()
+
+# FTE trends
+fig2 = px.line(df, x="date", y="total_fte", color="division", title="FTE Trends")
+fig2.update_layout(showlegend=True, legend=dict(orientation="h", y=-0.2))
+fig2.show()
+```
+
+### Summary Table
+
+```{{python}}
+summary = df.groupby("division").agg(
+    latest_salary=("median_salary", "last"),
+    salary_change=("median_salary", lambda x: x.iloc[-1] - x.iloc[0]),
+    avg_headcount=("headcount", "mean"),
+    avg_fte=("total_fte", "mean")
+).round(0)
+
+summary["salary_change_pct"] = (summary["salary_change"] / (summary["latest_salary"] - summary["salary_change"]) * 100).round(1)
+
+summary
+```
+
+:::
+````
+:::
+:::
+
+## Summary
+
+You've learned to create interactive dashboards:
+
+- **Plotly Interactivity**: Hover, zoom, pan, and selection built-in
+- **Dashboard Layouts**: Rows, columns, and value boxes
+- **Tabsets**: Organize multiple views without clutter
+- **OJS Filters**: Client-side interactivity without a server
+- **Publishing**: Deploy to GitHub Pages with one command
+
+Key takeaways:
+- Plotly + Quarto = interactive reports with no server required
+- Use tabsets to present multiple views of the same data
+- Value boxes highlight key metrics at a glance
+- GitHub Pages provides free hosting for your dashboards
+
+## Next Steps
+
+Continue to [Lesson 15: Working with APIs](15-working-with-apis.qmd) to learn how to fetch data programmatically.

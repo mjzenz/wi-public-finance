@@ -198,10 +198,10 @@ def generate_employee_id(row):
     - Same person with different hire dates will get different IDs
     - This is why we fix hire date inconsistencies before ID generation
     """
-    # Normalize names to uppercase for consistent matching across formats
-    # (UFAS uses UPPERCASE, Workday uses Title Case)
-    last_name = str(row['last_name']).upper()
-    first_name = str(row['first_name']).upper()
+    # Normalize names to uppercase and strip whitespace for consistent matching
+    # (UFAS uses UPPERCASE, Workday uses Title Case, and whitespace can vary)
+    last_name = str(row['last_name']).upper().strip()
+    first_name = str(row['first_name']).upper().strip()
 
     # Handle missing date_of_hire and normalize to YYYY-MM-DD format
     hire_date = row.get('date_of_hire', '')
@@ -363,7 +363,8 @@ def clean_salary_data(filenames, job_metadata=None):
     - current_annual_contracted_salary: Base annual salary
     - full_time_equivalent: FTE (0.0 to 1.0)
     - fte_adjusted_salary: Salary × FTE
-    - FTE_Adjusted_Salary_2021_Dollars: Inflation-adjusted salary
+    - Real_Salary_2021_Dollars: Inflation-adjusted salary (2021 dollars)
+    - FTE_Adjusted_Salary_2021_Dollars: FTE × inflation-adjusted salary
     - employee_category: Faculty, Academic Staff, etc.
     - job_group, job_subgroup: From job metadata
     - And many more...
@@ -449,25 +450,18 @@ def clean_salary_data(filenames, job_metadata=None):
 
     # Fix hire date inconsistencies between UFAS and Workday
     # Workday data (2025-09+) sometimes has different hire dates than UFAS
-    # Use the UFAS hire date when available for consistent employee IDs
-    ufas_cutoff = pd.Timestamp('2025-05-01')  # UFAS data is before this date
+    # Normalize hire dates: use earliest hire date for each person across all records
+    # This fixes inconsistencies where the same person has different hire dates in different snapshots
 
     # Create normalized name key for matching
     salaries['_name_key'] = (salaries['last_name'].str.upper().str.strip() + '|' +
                              salaries['first_name'].str.upper().str.strip())
 
-    # Get UFAS records and build name -> hire_date mapping (use earliest hire date)
-    ufas_records = salaries[salaries['Date'] < ufas_cutoff].copy()
-    if len(ufas_records) > 0:
-        # For each name, get the earliest (most likely original) hire date from UFAS
-        ufas_hire_dates = ufas_records.groupby('_name_key')['date_of_hire'].min().to_dict()
+    # For each name, get the earliest hire date across ALL records
+    earliest_hire_dates = salaries.groupby('_name_key')['date_of_hire'].min().to_dict()
 
-        # Apply UFAS hire dates to Workday records where names match
-        workday_mask = salaries['Date'] >= ufas_cutoff
-        for idx in salaries[workday_mask].index:
-            name_key = salaries.loc[idx, '_name_key']
-            if name_key in ufas_hire_dates:
-                salaries.loc[idx, 'date_of_hire'] = ufas_hire_dates[name_key]
+    # Apply earliest hire date to ALL records for each person
+    salaries['date_of_hire'] = salaries['_name_key'].map(earliest_hire_dates)
 
     # Clean up temporary column
     salaries = salaries.drop(columns=['_name_key'])
@@ -513,6 +507,10 @@ def clean_salary_data(filenames, job_metadata=None):
     salaries['2021_Index'] = salaries['CPI_2021_Index']
     salaries['FTE_Adjusted_Salary_2021_Dollars'] = (
         salaries['fte_adjusted_salary'] * salaries['2021_Index']
+    )
+    # Non-FTE-adjusted real salary (for apples-to-apples comparisons)
+    salaries['Real_Salary_2021_Dollars'] = (
+        salaries['current_annual_contracted_salary'] * salaries['2021_Index']
     )
 
     # Merge job metadata if available

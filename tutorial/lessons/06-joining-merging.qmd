@@ -1,0 +1,541 @@
+---
+title: "Joining and Merging Data"
+subtitle: "Lesson 6"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Use `merge()` to join DataFrames on common columns
+- Understand join types: inner, outer, left, right
+- Use `pd.concat()` to stack DataFrames vertically or horizontally
+- Handle duplicate keys and many-to-many joins
+- Validate join results
+:::
+
+::: {.concept-box}
+#### Fund Accounting Basics
+
+Public universities use **fund accounting** rather than the single-ledger approach common in private businesses. Every dollar is assigned to a specific fund that constrains how it can be spent:
+
+- **GPR (General Purpose Revenue)**: State tax dollars appropriated by the legislature. These fund core instructional positions and are the most politically visible.
+- **Program Revenue (PR)**: Tuition, fees, and auxiliary income. UW's tuition revenue has been subject to tuition freezes since 2013, creating budget pressure.
+- **Federal grants and contracts**: Research funding from NIH, NSF, DOE, etc. These funds come with strict rules on allowable costs, effort reporting, and fringe benefit rates.
+- **Gift funds**: Donor contributions, often restricted to specific purposes (endowed chairs, scholarships, departmental discretionary).
+- **Auxiliary enterprises**: Self-supporting operations like housing, dining, and athletics.
+
+When joining salary data to budget data, the fund source matters enormously. A position funded by a 3-year NIH grant has different cost implications than one on GPR. Merging salary records with fund-source tables lets you answer questions like: "What share of our salary costs are on soft money?" or "How exposed are we to state appropriation cuts?"
+
+Understanding fund accounting is foundational to any meaningful financial analysis in higher education.
+:::
+
+## Introduction
+
+Real-world analysis often requires combining data from multiple sources. In the salary data context, we might join:
+
+- Salary records with job metadata (job descriptions, education requirements)
+- Multiple salary snapshots over time
+- Employee data with CPI inflation data
+
+pandas uses `merge()` for SQL-style joins and `pd.concat()` for stacking data.
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Create salary data
+salary_df = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004", "E005"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"],
+    "jobcode": ["FA001", "FA002", "AS001", "FA001", "AS002"],
+    "salary": [85000, 125000, 62000, 95000, 58000],
+    "division": ["Letters & Science", "Medicine", "Letters & Science",
+                 "Engineering", "Business"]
+})
+
+# Create job metadata
+job_df = pd.DataFrame({
+    "jobcode": ["FA001", "FA002", "AS001", "AS002", "AS003"],
+    "title": ["Assistant Professor", "Associate Professor",
+              "Research Specialist", "Program Manager", "Analyst"],
+    "job_group": ["Faculty", "Faculty", "Academic Staff",
+                  "Academic Staff", "Academic Staff"],
+    "min_salary": [70000, 90000, 50000, 55000, 45000],
+    "max_salary": [120000, 160000, 85000, 90000, 75000]
+})
+
+print("Salary data:")
+print(salary_df)
+print("\nJob metadata:")
+print(job_df)
+```
+
+## Basic Merge (Inner Join)
+
+The `merge()` function joins DataFrames on common columns:
+
+```{python}
+# Inner join on jobcode
+merged = pd.merge(salary_df, job_df, on="jobcode")
+merged
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr approach
+inner_join(salary_df, job_df, by = "jobcode")
+
+# Base R
+merge(salary_df, job_df, by = "jobcode")
+```
+:::
+
+### What Happened?
+
+- pandas found the common column `jobcode`
+- Rows were matched where `jobcode` values matched
+- All columns from both DataFrames are included
+- This is an **inner join**: only matching rows are kept
+
+## Join Types
+
+### Left Join
+
+Keep all rows from the left DataFrame, match from the right:
+
+```{python}
+# Left join - keep all salary rows
+left_joined = pd.merge(salary_df, job_df, on="jobcode", how="left")
+left_joined
+```
+
+### Right Join
+
+Keep all rows from the right DataFrame:
+
+```{python}
+# Right join - keep all job rows
+right_joined = pd.merge(salary_df, job_df, on="jobcode", how="right")
+right_joined
+```
+
+Notice `AS003` appears with `NaN` values for salary data—no employee has that jobcode.
+
+### Outer (Full) Join
+
+Keep all rows from both DataFrames:
+
+```{python}
+# Outer join - keep everything
+outer_joined = pd.merge(salary_df, job_df, on="jobcode", how="outer")
+outer_joined
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr join types
+left_join(df1, df2, by = "key")
+right_join(df1, df2, by = "key")
+full_join(df1, df2, by = "key")
+inner_join(df1, df2, by = "key")
+```
+:::
+
+### Join Type Summary
+
+| Join Type | pandas `how=` | Keeps |
+|-----------|---------------|-------|
+| Inner | `"inner"` | Only matching rows |
+| Left | `"left"` | All left + matching right |
+| Right | `"right"` | All right + matching left |
+| Outer | `"outer"` | All rows from both |
+
+```{python}
+# Visual summary
+print(f"Salary rows: {len(salary_df)}")
+print(f"Job rows: {len(job_df)}")
+print(f"Inner join: {len(pd.merge(salary_df, job_df, on='jobcode', how='inner'))} rows")
+print(f"Left join:  {len(pd.merge(salary_df, job_df, on='jobcode', how='left'))} rows")
+print(f"Right join: {len(pd.merge(salary_df, job_df, on='jobcode', how='right'))} rows")
+print(f"Outer join: {len(pd.merge(salary_df, job_df, on='jobcode', how='outer'))} rows")
+```
+
+## Joining on Different Column Names
+
+When join columns have different names, use `left_on` and `right_on`:
+
+```{python}
+# Different column names
+other_df = pd.DataFrame({
+    "job_code": ["FA001", "FA002", "AS001"],  # Note: "job_code" not "jobcode"
+    "description": ["Teaching and research", "Senior teaching", "Research support"]
+})
+
+merged = pd.merge(
+    salary_df,
+    other_df,
+    left_on="jobcode",
+    right_on="job_code"
+)
+merged[["last_name", "jobcode", "job_code", "description"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr with different column names
+left_join(df1, df2, by = c("jobcode" = "job_code"))
+```
+:::
+
+## Joining on Multiple Columns
+
+When matching on multiple columns, pass a list:
+
+```{python}
+# Create data with multiple key columns
+snapshot1 = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003"],
+    "date": ["2023-01", "2023-01", "2023-01"],
+    "salary": [85000, 125000, 62000]
+})
+
+snapshot2 = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003"],
+    "date": ["2023-06", "2023-06", "2023-06"],
+    "salary": [87000, 128000, 64000]
+})
+
+performance = pd.DataFrame({
+    "employee_id": ["E001", "E001", "E002", "E002"],
+    "date": ["2023-01", "2023-06", "2023-01", "2023-06"],
+    "rating": [4.2, 4.5, 3.8, 4.0]
+})
+
+# Combine snapshots first
+all_salaries = pd.concat([snapshot1, snapshot2], ignore_index=True)
+print("All salaries:")
+print(all_salaries)
+```
+
+```{python}
+# Merge on both employee_id AND date
+with_ratings = pd.merge(
+    all_salaries,
+    performance,
+    on=["employee_id", "date"],
+    how="left"
+)
+with_ratings
+```
+
+## Concatenating DataFrames
+
+### Vertical Concatenation (Stacking Rows)
+
+Use `pd.concat()` to stack DataFrames:
+
+```{python}
+# Stack two salary snapshots
+combined = pd.concat([snapshot1, snapshot2], ignore_index=True)
+combined
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+bind_rows(df1, df2)
+
+# Base R
+rbind(df1, df2)
+```
+:::
+
+### Handling Different Columns
+
+`concat()` aligns on column names:
+
+```{python}
+# DataFrames with different columns
+df_a = pd.DataFrame({"name": ["Alice"], "salary": [80000]})
+df_b = pd.DataFrame({"name": ["Bob"], "department": ["Engineering"]})
+
+combined = pd.concat([df_a, df_b], ignore_index=True)
+combined
+```
+
+### Horizontal Concatenation (Stacking Columns)
+
+Use `axis=1`:
+
+```{python}
+# Side-by-side
+df_left = pd.DataFrame({"name": ["Alice", "Bob"], "salary": [80000, 90000]})
+df_right = pd.DataFrame({"department": ["HR", "Engineering"], "years": [5, 3]})
+
+combined = pd.concat([df_left, df_right], axis=1)
+combined
+```
+
+## Handling Duplicates in Joins
+
+### Duplicate Keys (Many-to-Many)
+
+When both DataFrames have duplicate keys, you get a Cartesian product:
+
+```{python}
+# Multiple employees with same jobcode
+employees = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003"],
+    "jobcode": ["FA001", "FA001", "FA001"],  # All same jobcode
+    "name": ["Alice", "Bob", "Carol"]
+})
+
+# Multiple records per jobcode
+assignments = pd.DataFrame({
+    "jobcode": ["FA001", "FA001"],
+    "course": ["CHEM101", "CHEM201"]
+})
+
+# Many-to-many creates 6 rows (3 employees × 2 courses)
+result = pd.merge(employees, assignments, on="jobcode")
+result
+```
+
+::: {.callout-warning}
+Many-to-many joins can explode your row count! Always check the result size.
+:::
+
+### Validating Joins
+
+Use the `validate` parameter to catch unexpected duplicates:
+
+```{python}
+#| eval: false
+# Expect one-to-one relationship
+pd.merge(df1, df2, on="key", validate="one_to_one")
+
+# Expect many-to-one (left has duplicates, right doesn't)
+pd.merge(df1, df2, on="key", validate="many_to_one")
+
+# Expect one-to-many
+pd.merge(df1, df2, on="key", validate="one_to_many")
+```
+
+```{python}
+# This will work - one-to-many is valid here
+try:
+    result = pd.merge(salary_df, job_df, on="jobcode", validate="many_to_one")
+    print("Validation passed!")
+    print(f"Result has {len(result)} rows")
+except Exception as e:
+    print(f"Validation failed: {e}")
+```
+
+## Using `indicator` to Track Join Sources
+
+The `indicator` parameter shows which rows matched:
+
+```{python}
+# Track which DataFrame each row came from
+result = pd.merge(
+    salary_df, job_df,
+    on="jobcode",
+    how="outer",
+    indicator=True
+)
+result[["jobcode", "last_name", "title", "_merge"]]
+```
+
+This is helpful for finding unmatched records:
+
+```{python}
+# Find jobs with no employees
+no_employees = result[result["_merge"] == "right_only"]
+print("Job codes with no employees:")
+print(no_employees[["jobcode", "title"]])
+```
+
+## Practical Example: Enriching Salary Data
+
+Let's combine salary data with job metadata and CPI data:
+
+```{python}
+# Salary data
+salaries = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003"],
+    "date": ["2023-01", "2023-01", "2023-01"],
+    "jobcode": ["FA001", "FA002", "AS001"],
+    "salary": [85000, 125000, 62000]
+})
+
+# Job metadata
+jobs = pd.DataFrame({
+    "jobcode": ["FA001", "FA002", "AS001"],
+    "job_group": ["Faculty", "Faculty", "Academic Staff"],
+    "min_salary": [70000, 90000, 50000]
+})
+
+# CPI data
+cpi = pd.DataFrame({
+    "date": ["2023-01", "2023-06", "2024-01"],
+    "cpi": [299.2, 303.8, 308.4],
+    "cpi_index_2021": [0.92, 0.90, 0.89]  # For inflation adjustment
+})
+
+# Step 1: Add job metadata
+with_jobs = pd.merge(salaries, jobs, on="jobcode", how="left")
+
+# Step 2: Add CPI data
+enriched = pd.merge(with_jobs, cpi, on="date", how="left")
+
+# Step 3: Calculate real salary
+enriched["real_salary_2021"] = enriched["salary"] * enriched["cpi_index_2021"]
+enriched["above_min"] = enriched["salary"] > enriched["min_salary"]
+
+enriched
+```
+
+## Anti-Join: Finding Non-Matches
+
+pandas doesn't have a direct anti-join, but you can achieve it with the indicator:
+
+```{python}
+# Find employees whose jobcode isn't in the job metadata
+result = pd.merge(
+    salary_df, job_df,
+    on="jobcode",
+    how="left",
+    indicator=True
+)
+
+# Anti-join: rows only in left DataFrame
+no_match = result[result["_merge"] == "left_only"]
+print("Employees with no matching job metadata:")
+print(no_match[["employee_id", "jobcode"]])
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr anti_join
+anti_join(salary_df, job_df, by = "jobcode")
+```
+:::
+
+## Quick Reference
+
+| Task | pandas | dplyr |
+|------|--------|-------|
+| Inner join | `merge(how="inner")` | `inner_join()` |
+| Left join | `merge(how="left")` | `left_join()` |
+| Right join | `merge(how="right")` | `right_join()` |
+| Full join | `merge(how="outer")` | `full_join()` |
+| Stack rows | `pd.concat([df1, df2])` | `bind_rows()` |
+| Stack columns | `pd.concat([df1, df2], axis=1)` | `bind_cols()` |
+| Anti-join | `merge()` + filter `_merge` | `anti_join()` |
+| Multiple keys | `on=["key1", "key2"]` | `by = c("k1", "k2")` |
+| Different names | `left_on=, right_on=` | `by = c("a" = "b")` |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 6: Merging Salary and Job Metadata
+
+1. Create a salary DataFrame with 6 employees, including their jobcodes
+2. Create a job metadata DataFrame with job descriptions for 4 jobcodes
+3. Perform a left join to keep all employees
+4. Find which employees have no matching job metadata (anti-join pattern)
+5. Create two salary snapshots (different dates) and concatenate them
+6. Join the concatenated data with a CPI table to add inflation data
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+# 1. Salary data with 6 employees
+salaries = pd.DataFrame({
+    "employee_id": ["E001", "E002", "E003", "E004", "E005", "E006"],
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES", "DAVIS"],
+    "jobcode": ["FA001", "FA002", "AS001", "FA001", "XX999", "AS002"],  # XX999 won't match
+    "salary": [85000, 125000, 62000, 95000, 70000, 58000]
+})
+
+# 2. Job metadata (4 jobcodes)
+jobs = pd.DataFrame({
+    "jobcode": ["FA001", "FA002", "AS001", "AS002"],
+    "title": ["Asst Professor", "Assoc Professor", "Research Spec", "Program Mgr"],
+    "job_group": ["Faculty", "Faculty", "Academic Staff", "Academic Staff"]
+})
+
+# 3. Left join
+print("3. Left join result:")
+merged = pd.merge(salaries, jobs, on="jobcode", how="left")
+print(merged)
+
+# 4. Anti-join pattern - find unmatched
+print("\n4. Employees with no job metadata:")
+with_indicator = pd.merge(salaries, jobs, on="jobcode", how="left", indicator=True)
+unmatched = with_indicator[with_indicator["_merge"] == "left_only"]
+print(unmatched[["employee_id", "last_name", "jobcode"]])
+
+# 5. Two snapshots, concatenated
+snapshot_jan = pd.DataFrame({
+    "employee_id": ["E001", "E002"],
+    "date": ["2023-01", "2023-01"],
+    "salary": [85000, 125000]
+})
+
+snapshot_jun = pd.DataFrame({
+    "employee_id": ["E001", "E002"],
+    "date": ["2023-06", "2023-06"],
+    "salary": [87000, 128000]
+})
+
+combined = pd.concat([snapshot_jan, snapshot_jun], ignore_index=True)
+print("\n5. Combined snapshots:")
+print(combined)
+
+# 6. Join with CPI
+cpi = pd.DataFrame({
+    "date": ["2023-01", "2023-06"],
+    "cpi": [299.2, 303.8],
+    "cpi_2021_index": [0.92, 0.90]
+})
+
+with_cpi = pd.merge(combined, cpi, on="date", how="left")
+with_cpi["real_salary"] = with_cpi["salary"] * with_cpi["cpi_2021_index"]
+print("\n6. With CPI adjustment:")
+print(with_cpi)
+```
+:::
+:::
+
+## Summary
+
+You've learned to combine DataFrames in pandas:
+
+- **`merge()`**: SQL-style joins (inner, left, right, outer)
+- **`pd.concat()`**: Stack DataFrames vertically or horizontally
+- **`indicator`**: Track which DataFrame each row came from
+- **`validate`**: Catch unexpected duplicate keys
+- **Anti-join pattern**: Find unmatched rows using indicator
+
+Key differences from R:
+- pandas uses `merge()` with `how=` parameter instead of separate join functions
+- `pd.concat()` replaces `bind_rows()` and `bind_cols()`
+- No built-in anti-join, but easily done with indicator
+
+## Next Steps
+
+Continue to [Lesson 7: Working with Dates and Time Series](07-dates-timeseries.qmd) to learn date manipulation and time-based analysis.

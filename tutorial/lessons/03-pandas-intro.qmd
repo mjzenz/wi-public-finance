@@ -1,0 +1,561 @@
+---
+title: "Introduction to pandas DataFrames"
+subtitle: "Lesson 3"
+---
+
+::: {.learning-objectives}
+#### Learning Objectives
+
+After this lesson, you will be able to:
+
+- Create pandas DataFrames from dictionaries
+- Read data from CSV and Excel files
+- Understand the difference between DataFrames and Series
+- Explore data structure with `shape`, `dtypes`, `head()`, `info()`
+- Select columns using bracket notation
+:::
+
+::: {.concept-box}
+#### Understanding Public Salary Data
+
+The UW System salary data we use throughout this tutorial is **public record** under Wisconsin's open records law (Wis. Stat. § 19.31–19.39). Every state employee's name, title, and salary is available to the public — a transparency measure common across public universities nationwide.
+
+When working with this data, keep several structural features in mind:
+
+- **Appointment basis**: Faculty may hold 9-month (academic year) or 12-month (annual) appointments. A 9-month salary of $90,000 is not directly comparable to a 12-month salary of $90,000 — you need to annualize or normalize before comparing.
+- **FTE (Full-Time Equivalent)**: A 0.50 FTE employee earning $40,000 has a full-time-equivalent salary of $80,000. Always decide whether you're analyzing *actual pay* or *FTE-adjusted salary rates*.
+- **Funded vs. budgeted salary**: The salary on record may reflect the budgeted rate, not what's actually drawn from a particular funding source. Split-funded positions (e.g., 50% state, 50% grant) add complexity.
+- **Snapshot timing**: Salary files typically represent a point-in-time snapshot (e.g., October payroll). Raises, departures, and new hires between snapshots are invisible.
+
+Understanding these nuances is essential before any aggregation or comparison — a lesson that applies to any institutional dataset, not just UW.
+:::
+
+## Introduction
+
+pandas is Python's answer to R's data frames and the tidyverse. The name comes from "panel data" (an econometrics term), and it provides two main data structures:
+
+- **DataFrame**: A 2D labeled data structure (like R's `data.frame` or `tibble`)
+- **Series**: A 1D labeled array (like a single column)
+
+```{python}
+import pandas as pd
+import numpy as np
+
+# Check version
+print(f"pandas version: {pd.__version__}")
+```
+
+## Creating DataFrames
+
+### From a Dictionary
+
+The most common way to create a DataFrame is from a dictionary where keys become column names:
+
+```{python}
+# Create from dictionary
+data = {
+    "name": ["Alice", "Bob", "Carol", "David"],
+    "department": ["Engineering", "Marketing", "Engineering", "HR"],
+    "salary": [85000, 72000, 91000, 68000],
+    "years": [5, 3, 8, 2]
+}
+
+df = pd.DataFrame(data)
+df
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Base R
+df <- data.frame(
+  name = c("Alice", "Bob", "Carol", "David"),
+  department = c("Engineering", "Marketing", "Engineering", "HR"),
+  salary = c(85000, 72000, 91000, 68000),
+  years = c(5, 3, 8, 2)
+)
+
+# tidyverse
+df <- tibble(
+  name = c("Alice", "Bob", "Carol", "David"),
+  department = c("Engineering", "Marketing", "Engineering", "HR"),
+  salary = c(85000, 72000, 91000, 68000),
+  years = c(5, 3, 8, 2)
+)
+```
+:::
+
+### From a List of Dictionaries
+
+Each dictionary becomes a row:
+
+```{python}
+employees = [
+    {"name": "Alice", "salary": 85000},
+    {"name": "Bob", "salary": 72000},
+    {"name": "Carol", "salary": 91000}
+]
+
+df_from_list = pd.DataFrame(employees)
+df_from_list
+```
+
+## Reading Data Files
+
+### Reading CSV Files
+
+```{python}
+#| eval: false
+# Read a CSV file
+df = pd.read_csv("data/employees.csv")
+
+# With options
+df = pd.read_csv(
+    "data/employees.csv",
+    encoding="utf-8",          # Character encoding
+    parse_dates=["hire_date"], # Parse as datetime
+    na_values=["N/A", ""],     # Treat as missing
+)
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Base R
+df <- read.csv("data/employees.csv")
+
+# readr (tidyverse)
+df <- read_csv(
+  "data/employees.csv",
+  col_types = cols(hire_date = col_date())
+)
+```
+:::
+
+### Reading Excel Files
+
+Our salary data is in Excel format. Let's read the first snapshot:
+
+```{python}
+#| eval: false
+# Read Excel file (requires openpyxl)
+df = pd.read_excel("../data/2021-11 UW Madison Employee Compensation.xlsx")
+```
+
+For this tutorial, let's create sample data that mirrors the structure:
+
+```{python}
+# Sample salary data mimicking real structure
+salary_data = {
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES"],
+    "first_name": ["JOHN", "MARY", "JAMES", "PATRICIA", "ROBERT"],
+    "division": [
+        "College of Letters & Science",
+        "School of Medicine and Public Health",
+        "College of Letters & Science",
+        "College of Engineering",
+        "School of Business"
+    ],
+    "department": [
+        "Chemistry",
+        "Internal Medicine",
+        "English",
+        "Computer Sciences",
+        "Finance"
+    ],
+    "title": [
+        "Professor",
+        "Associate Professor",
+        "Assistant Professor",
+        "Professor",
+        "Lecturer"
+    ],
+    "employee_category": ["Faculty", "Faculty", "Faculty", "Faculty", "Academic Staff"],
+    "current_annual_contracted_salary": [125000, 185000, 95000, 175000, 65000],
+    "full_time_equivalent": [1.0, 1.0, 1.0, 0.75, 0.5],
+    "date_of_hire": ["2010-08-15", "2005-01-10", "2020-08-20", "2015-06-01", "2018-09-01"]
+}
+
+salary_df = pd.DataFrame(salary_data)
+salary_df
+```
+
+## Exploring DataFrame Structure
+
+### Basic Properties
+
+```{python}
+# Shape: (rows, columns)
+print(f"Shape: {salary_df.shape}")
+print(f"Rows: {salary_df.shape[0]}, Columns: {salary_df.shape[1]}")
+
+# Column names
+print(f"\nColumns: {salary_df.columns.tolist()}")
+```
+
+### Data Types
+
+```{python}
+# Data types for each column
+salary_df.dtypes
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Structure
+str(df)
+
+# Dimensions
+dim(df)
+nrow(df)
+ncol(df)
+
+# Column names
+names(df)
+colnames(df)
+```
+:::
+
+### The `info()` Method
+
+`info()` provides a comprehensive summary:
+
+```{python}
+salary_df.info()
+```
+
+### Preview Data
+
+```{python}
+# First n rows (default 5)
+print("First 3 rows:")
+print(salary_df.head(3))
+```
+
+```{python}
+# Last n rows
+print("\nLast 2 rows:")
+print(salary_df.tail(2))
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+head(df, 3)
+tail(df, 2)
+
+# Or use slice
+df %>% slice_head(n = 3)
+df %>% slice_tail(n = 2)
+```
+:::
+
+### Summary Statistics
+
+```{python}
+# Numeric summary
+salary_df.describe()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+summary(df)
+
+# Or with skimr for more detail
+library(skimr)
+skim(df)
+```
+:::
+
+## DataFrames vs Series
+
+A **DataFrame** is a 2D structure (rows and columns). A **Series** is a 1D structure (a single column with an index).
+
+```{python}
+# Selecting a single column returns a Series
+salary_series = salary_df["current_annual_contracted_salary"]
+print(f"Type: {type(salary_series)}")
+print(salary_series)
+```
+
+```{python}
+# Selecting multiple columns returns a DataFrame
+subset_df = salary_df[["last_name", "current_annual_contracted_salary"]]
+print(f"Type: {type(subset_df)}")
+print(subset_df)
+```
+
+::: {.callout-note}
+#### Key Difference
+- Single brackets with one column name → **Series**: `df["col"]`
+- Double brackets (list of columns) → **DataFrame**: `df[["col"]]`
+:::
+
+## Selecting Columns
+
+### Single Column
+
+```{python}
+# Bracket notation (always works)
+salaries = salary_df["current_annual_contracted_salary"]
+print(salaries.head())
+```
+
+```{python}
+# Dot notation (only works for simple column names)
+# Column name must be valid Python identifier (no spaces, doesn't start with number)
+divisions = salary_df.division
+print(divisions.head())
+```
+
+::: {.callout-warning}
+Use bracket notation when column names have spaces, special characters, or match Python keywords. Dot notation is convenient but limited.
+:::
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# Base R
+df$salary
+df[["salary"]]
+df[, "salary"]
+
+# tidyverse
+df %>% pull(salary)
+```
+:::
+
+### Multiple Columns
+
+```{python}
+# Select multiple columns with a list
+subset = salary_df[["last_name", "first_name", "current_annual_contracted_salary"]]
+subset
+```
+
+```{python}
+# Reorder columns
+reordered = salary_df[["title", "last_name", "first_name", "current_annual_contracted_salary"]]
+reordered
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+df %>% select(last_name, first_name, salary)
+
+# Base R
+df[, c("last_name", "first_name", "salary")]
+```
+:::
+
+## Basic Column Operations
+
+### Creating New Columns
+
+```{python}
+# Create a new column
+salary_df["fte_adjusted_salary"] = (
+    salary_df["current_annual_contracted_salary"] *
+    salary_df["full_time_equivalent"]
+)
+
+salary_df[["last_name", "current_annual_contracted_salary",
+           "full_time_equivalent", "fte_adjusted_salary"]]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+df <- df %>%
+  mutate(fte_adjusted_salary = current_annual_contracted_salary * full_time_equivalent)
+
+# Base R
+df$fte_adjusted_salary <- df$current_annual_contracted_salary * df$full_time_equivalent
+```
+:::
+
+### Renaming Columns
+
+```{python}
+# Rename columns
+renamed = salary_df.rename(columns={
+    "current_annual_contracted_salary": "salary",
+    "full_time_equivalent": "fte"
+})
+
+renamed.columns.tolist()
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+```r
+# dplyr
+df <- df %>%
+  rename(
+    salary = current_annual_contracted_salary,
+    fte = full_time_equivalent
+  )
+```
+:::
+
+### Dropping Columns
+
+```{python}
+# Drop columns
+slim_df = salary_df.drop(columns=["fte_adjusted_salary"])
+slim_df.columns.tolist()
+```
+
+## Working with the Index
+
+Every DataFrame has an index (row labels). By default, it's integers starting at 0:
+
+```{python}
+print(salary_df.index)
+```
+
+You can set a column as the index:
+
+```{python}
+# Set last_name as index
+indexed_df = salary_df.set_index("last_name")
+indexed_df.head()
+```
+
+```{python}
+# Access by index label
+indexed_df.loc["SMITH"]
+```
+
+::: {.callout-tip collapse="true"}
+## In R
+
+R uses row names similarly, but tidyverse discourages row names in favor of explicit ID columns:
+
+```r
+# Base R
+rownames(df) <- df$last_name
+df["SMITH", ]
+
+# tidyverse prefers
+df %>% filter(last_name == "SMITH")
+```
+:::
+
+## Quick Reference: DataFrame Methods
+
+| Method | Description | R Equivalent |
+|--------|-------------|--------------|
+| `df.head(n)` | First n rows | `head(df, n)` |
+| `df.tail(n)` | Last n rows | `tail(df, n)` |
+| `df.shape` | (rows, columns) | `dim(df)` |
+| `df.columns` | Column names | `names(df)` |
+| `df.dtypes` | Column data types | `sapply(df, class)` |
+| `df.info()` | Summary info | `str(df)` |
+| `df.describe()` | Numeric stats | `summary(df)` |
+| `df["col"]` | Select column (Series) | `df$col` |
+| `df[["col"]]` | Select column (DataFrame) | `df["col"]` |
+| `df.rename()` | Rename columns | `rename(df, ...)` |
+| `df.drop()` | Drop columns | `select(df, -col)` |
+
+## Exercise {#exercise}
+
+::: {.exercise-box}
+#### Exercise 3: Exploring Salary Data
+
+Using the sample salary data (or load a real salary file if available):
+
+1. Create a DataFrame with at least 8 employees across 3 divisions
+2. Display the shape, column names, and data types
+3. Show summary statistics for numeric columns
+4. Select just the name columns and salary
+5. Create a new column `monthly_salary` (annual salary / 12)
+6. Rename `current_annual_contracted_salary` to `annual_salary`
+
+::: {.callout-note collapse="true"}
+## Solution
+
+```{python}
+import pandas as pd
+
+# 1. Create DataFrame with 8 employees
+data = {
+    "last_name": ["SMITH", "JOHNSON", "WILLIAMS", "BROWN",
+                  "JONES", "DAVIS", "MILLER", "WILSON"],
+    "first_name": ["JOHN", "MARY", "JAMES", "PATRICIA",
+                   "ROBERT", "LINDA", "MICHAEL", "SARAH"],
+    "division": [
+        "Letters & Science", "Medicine", "Letters & Science", "Engineering",
+        "Business", "Letters & Science", "Medicine", "Engineering"
+    ],
+    "current_annual_contracted_salary": [
+        125000, 185000, 95000, 175000, 65000, 78000, 145000, 92000
+    ],
+    "full_time_equivalent": [1.0, 1.0, 1.0, 0.75, 0.5, 1.0, 0.8, 1.0]
+}
+
+df = pd.DataFrame(data)
+
+# 2. Display structure info
+print("Shape:", df.shape)
+print("\nColumns:", df.columns.tolist())
+print("\nData types:")
+print(df.dtypes)
+
+# 3. Summary statistics
+print("\nSummary statistics:")
+print(df.describe())
+
+# 4. Select name columns and salary
+name_salary = df[["last_name", "first_name", "current_annual_contracted_salary"]]
+print("\nName and salary:")
+print(name_salary)
+
+# 5. Create monthly salary column
+df["monthly_salary"] = df["current_annual_contracted_salary"] / 12
+print("\nWith monthly salary:")
+print(df[["last_name", "current_annual_contracted_salary", "monthly_salary"]])
+
+# 6. Rename salary column
+df = df.rename(columns={"current_annual_contracted_salary": "annual_salary"})
+print("\nUpdated columns:", df.columns.tolist())
+```
+:::
+:::
+
+## Summary
+
+You've learned the fundamentals of pandas DataFrames:
+
+- **Creating DataFrames** from dictionaries and files
+- **Exploring structure** with `shape`, `dtypes`, `info()`, `describe()`
+- **Series vs DataFrame** - single column vs multiple columns
+- **Selecting columns** with bracket and dot notation
+- **Basic operations** - creating, renaming, dropping columns
+
+Key differences from R:
+
+| pandas | R/tidyverse |
+|--------|-------------|
+| `df["col"]` returns Series | `df$col` returns vector |
+| `df[["col"]]` returns DataFrame | `df["col"]` returns data frame |
+| `df.rename(columns={})` | `rename(df, new = old)` |
+| `df.drop(columns=[])` | `select(df, -col)` |
+
+## Next Steps
+
+Continue to [Lesson 4: Data Selection and Filtering](04-selection-filtering.qmd) to learn how to filter rows and select data using `.loc[]` and `.iloc[]`.

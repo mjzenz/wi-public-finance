@@ -1,0 +1,130 @@
+---
+title: "Python for Financial Analysis"
+subtitle: "An R User's Guide to pandas and Beyond"
+---
+
+## Welcome
+
+This tutorial teaches Python for financial and workforce analysis, designed specifically for analysts who already know R. Using real University of Wisconsin-Madison salary data spanning 2021-2025, you'll learn to translate your R/tidyverse skills to Python/pandas while exploring practical financial analysis concepts.
+
+## Who This Is For
+
+This tutorial assumes you:
+
+- **Know R well** - You're comfortable with dplyr, tidyr, and ggplot2
+- **Understand data analysis** - You've worked with real datasets and know about joins, aggregations, and data cleaning
+- **Have domain context** - Familiarity with higher education or public sector data is helpful but not required
+
+You'll find collapsible "In R" callouts throughout that show equivalent R code for each Python concept.
+
+## What You'll Learn
+
+::: {.grid}
+
+::: {.g-col-6}
+### Python Fundamentals
+- Setting up PyCharm and virtual environments
+- Python syntax differences from R
+- pandas DataFrames and Series
+- Data selection, filtering, and transformation
+:::
+
+::: {.g-col-6}
+### Financial Analysis
+- Inflation adjustment with CPI data
+- Compensation analysis and peer comparisons
+- Workforce analytics (headcount, FTE, turnover)
+- Tracking individuals over time
+:::
+
+::: {.g-col-6}
+### Data Skills
+- Working with APIs (FRED economic data)
+- Web scraping job descriptions
+- String operations and data cleaning
+- Date/time manipulation
+:::
+
+::: {.g-col-6}
+### Visualization & Production
+- Interactive charts with Plotly
+- Quarto dashboards
+- Building reusable data pipelines
+- Capstone analysis project
+:::
+
+:::
+
+## The Data
+
+We use publicly available salary records from UW-Madison, including:
+
+- **8 snapshots** from November 2021 to September 2025
+- **~25,000+ employee records** per snapshot
+- **System transition** from UFAS (legacy) to Workday (2025)
+- **Rich metadata** including job classifications, divisions, and departments
+
+This data presents real-world challenges: inconsistent formatting, organizational restructuring, and multiple data sources to merge.
+
+## Lesson Structure
+
+Each lesson includes:
+
+1. **Learning objectives** - What you'll be able to do
+2. **Concept explanations** - With R comparisons in collapsible callouts
+3. **Worked examples** - Using the salary data
+4. **Exercises** - Practice problems with solutions
+
+## Getting Started
+
+Ready to begin? Start with [Lesson 1: Setting Up Your Python Environment](lessons/01-setup.qmd).
+
+::: {.callout-note}
+## Prerequisites
+Before starting, you should have:
+
+- A computer with admin rights to install software
+- Basic familiarity with command line/terminal
+- The tutorial data files (included in this repository)
+:::
+
+## Tutorial Outline
+
+### Part 1: Foundations
+1. [Setting Up Your Python Environment](lessons/01-setup.qmd)
+2. [Python Syntax for R Users](lessons/02-syntax.qmd)
+3. [Introduction to pandas DataFrames](lessons/03-pandas-intro.qmd)
+4. [Data Selection and Filtering](lessons/04-selection-filtering.qmd)
+
+### Part 2: Data Transformation
+5. [Reshaping and Aggregation](lessons/05-reshaping-aggregation.qmd)
+6. [Joining and Merging Data](lessons/06-joining-merging.qmd)
+7. [Working with Dates and Time Series](lessons/07-dates-timeseries.qmd)
+8. [String Operations](lessons/08-string-operations.qmd)
+
+### Part 3: Financial Analysis
+9. [Inflation Adjustment and Real vs Nominal Values](lessons/09-inflation-adjustment.qmd)
+10. [Compensation Analysis and Distributions](lessons/10-compensation-analysis.qmd)
+11. [Workforce Analytics: Headcount and FTE](lessons/11-workforce-analytics.qmd)
+12. [Tracking Individuals Over Time](lessons/12-tracking-individuals.qmd)
+
+### Part 4: Visualization
+13. [Static Visualization with Plotly](lessons/13-plotly-basics.qmd)
+14. [Interactive Dashboards in Quarto](lessons/14-interactive-dashboards.qmd)
+
+### Part 5: Data Acquisition
+15. [Working with APIs](lessons/15-working-with-apis.qmd)
+16. [Web Scraping Basics](lessons/16-web-scraping.qmd)
+
+### Part 6: Production Patterns
+17. [Building Reusable Data Pipelines](lessons/17-reusable-pipelines.qmd)
+18. [Capstone: Complete Analysis Report](lessons/18-capstone.qmd)
+
+### Part 7: Advanced Financial Analysis
+19. [Inequality Metrics](lessons/19-inequality-metrics.qmd)
+20. [Salary Compression Analysis](lessons/20-salary-compression.qmd)
+21. [Statistical Testing for Equity](lessons/21-statistical-testing.qmd)
+22. [Forecasting and Trend Modeling](lessons/22-forecasting.qmd)
+23. [Cost Modeling and Budget Impact](lessons/23-cost-modeling.qmd)
+24. [Markov Chain Workforce Modeling](lessons/24-markov-workforce.qmd)
+25. [Peer Institution Comparison](lessons/25-peer-comparison.qmd)
