@@ -1,0 +1,794 @@
+---
+title: "L&S Administrative Regional Teams: Salary Change Analysis"
+format:
+  html:
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+---
+
+```{python}
+import pandas as pd
+import numpy as np
+import glob
+import os
+import re
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from IPython.display import Markdown
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+ADMIN_DEPTS = ["Administration", "Letters & Science Administration"]
+
+SALARY_COL_MAP = {
+    "Annual_Full_Salary": "salary",
+    "Annualized_Rate_Amount": "salary",
+}
+
+JOB_CATEGORIES = {
+    "Finance": [
+        "Financial Specialist", "Accountant", "Budget Planner",
+        "Post-Award", "Pre-Award", "Finance Associate", "Financial Manager",
+        "Fiscal",
+    ],
+    "HR": [
+        "HR ", "Human Resource", "Payroll", "Benefits Spec",
+        "Recruitment Specialist",
+    ],
+    "Research Admin": [
+        "Research Administrative", "Multi-fun Res Admin",
+        "Research CI Manager",
+    ],
+    "IT": [
+        "DevOps", "System Engineer", "User Support", "IT Manager",
+        "IT Director", "CADD Specialist", "Statistical Consultant",
+        "Database Administrator",
+    ],
+    "Leadership": [
+        "Dean", "Assistant Dean", "Assoc Dean", "Associate Dean",
+        "Director", "Innovation and Strategy",
+    ],
+    "Dept Admin": [
+        "Department Administrator", "Administrative Manager",
+        "Administrative Assistant", "Center Administrator",
+        "Administrative Specialist", "Admin Assoc Dir",
+        "Admin Asst Dir",
+    ],
+    "Communications": [
+        "Communications Specialist", "Writer", "Marketing",
+        "Teach, Learn & Tech",
+    ],
+}
+
+# Categories checked in priority order — Leadership first so "Director"
+# doesn't get caught by Dept Admin, and Dept Admin before Others so
+# "Administrative" titles are classified correctly.
+_CAT_PRIORITY = [
+    "Leadership", "Finance", "HR", "Research Admin", "IT",
+    "Dept Admin", "Communications",
+]
+
+
+def categorize_title(title: str) -> str:
+    """Assign a job-function category based on title keywords."""
+    t = str(title)
+    for cat in _CAT_PRIORITY:
+        for kw in JOB_CATEGORIES[cat]:
+            if kw.lower() in t.lower():
+                return cat
+    return "Other"
+
+
+def load_snapshot(filepath: str) -> pd.DataFrame:
+    """Load an Excel salary file and return a normalized L&S dataframe."""
+    df = pd.read_excel(filepath)
+    basename = os.path.basename(filepath)
+    m = re.search(r"(\d{4})[-._ ]?(\d{2})", basename)
+    date_str = f"{m.group(1)}-{m.group(2)}"
+
+    # Detect salary column
+    sal_col = None
+    for c in df.columns:
+        if c in SALARY_COL_MAP:
+            sal_col = c
+            break
+    if sal_col is None:
+        raise ValueError(f"No salary column found in {basename}: {list(df.columns)}")
+
+    # Detect FTE column
+    fte_col = None
+    for c in df.columns:
+        cl = c.lower().replace(" ", "_").replace("-", "_")
+        if "full_time" in cl or cl == "fte":
+            fte_col = c
+            break
+
+    # Detect name columns (handle both 'First Name' and 'First_Name')
+    first_col = [c for c in df.columns if "first" in c.lower() and "name" in c.lower()][0]
+    last_col = [c for c in df.columns if "last" in c.lower() and "name" in c.lower()][0]
+
+    # Filter to L&S
+    ls = df[
+        df["Division"].astype(str).str.contains("Letters|College of Letters", case=False, na=False)
+    ].copy()
+
+    result = pd.DataFrame({
+        "first_name": ls[first_col].values,
+        "last_name": ls[last_col].values,
+        "department": ls["Department"].values,
+        "title": ls["Title"].values,
+        "salary": ls[sal_col].values,
+        "fte": ls[fte_col].values if fte_col else 1.0,
+        "date": date_str,
+    })
+    result["name_key"] = (
+        result["last_name"].astype(str).str.upper().str.strip()
+        + "|"
+        + result["first_name"].astype(str).str.upper().str.strip()
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Load data
+# ---------------------------------------------------------------------------
+
+files = sorted(glob.glob("data/*.xlsx"))
+snapshots = {}
+for f in files:
+    m = re.search(r"(\d{4})[-._ ]?(\d{2})", os.path.basename(f))
+    if m:
+        snapshots[f"{m.group(1)}-{m.group(2)}"] = f
+
+# Load all snapshots from 2024-04 onward
+dates_of_interest = [d for d in sorted(snapshots.keys()) if d >= "2024-04"]
+frames = {d: load_snapshot(snapshots[d]) for d in dates_of_interest}
+
+start_date = "2024-04"
+end_date = "2026-03"
+df_start = frames[start_date]
+df_end = frames[end_date]
+```
+
+
+## Background
+
+The College of Letters & Science consolidated departmental administrative staff
+into a centralized **Administrative Regional Teams (ART)** structure housed
+under "L&S Administration." This report compares salary changes from
+**`{python} start_date`** to **`{python} end_date`** for two groups of employees
+currently in L&S Administration:
+
+- **Administration (original):** employees already in the Administration
+  department as of `{python} start_date`.
+- **ART (from departments):** employees who were working in individual L&S
+  departments as of `{python} start_date` and were subsequently moved into
+  L&S Administration.
+
+Employees not present in both the `{python} start_date` and `{python} end_date`
+snapshots (new hires, departures) are excluded. Zero-FTE courtesy appointments
+are also excluded.
+
+All salaries shown are **full-time equivalent rates** (the annualized rate at
+1.0 FTE), not total compensation. This allows direct comparison of pay rates
+regardless of appointment percentage.
+
+```{python}
+# ---------------------------------------------------------------------------
+# Build the two-group comparison dataset
+# ---------------------------------------------------------------------------
+
+# Keep primary appointment per person (highest salary)
+# Filter out 0-FTE courtesy appointments so we compare actual pay rates
+start = (
+    df_start[(df_start["salary"] > 0) & (df_start["fte"] > 0)]
+    .sort_values("salary", ascending=False)
+    .drop_duplicates("name_key", keep="first")
+)
+end_admin = (
+    df_end[
+        df_end["department"].isin(ADMIN_DEPTS)
+        & (df_end["salary"] > 0)
+        & (df_end["fte"] > 0)
+    ]
+    .sort_values("salary", ascending=False)
+    .drop_duplicates("name_key", keep="first")
+)
+
+# Merge: people in admin now who also existed in L&S in 2024-04
+merged = end_admin.merge(
+    start[["name_key", "department", "title", "salary", "fte"]],
+    on="name_key",
+    how="inner",
+    suffixes=("_end", "_start"),
+)
+
+merged["group"] = np.where(
+    merged["department_start"].isin(ADMIN_DEPTS),
+    "Administration (original)",
+    "ART (from departments)",
+)
+
+merged["salary_change"] = merged["salary_end"] - merged["salary_start"]
+merged["pct_change"] = merged["salary_change"] / merged["salary_start"] * 100
+merged["category"] = merged["title_end"].apply(categorize_title)
+
+# For ART group, also note their source department
+merged["source_dept"] = np.where(
+    merged["group"] == "ART (from departments)",
+    merged["department_start"],
+    "Administration",
+)
+
+n_admin = (merged["group"] == "Administration (original)").sum()
+n_art = (merged["group"] == "ART (from departments)").sum()
+```
+
+```{python}
+Markdown(
+    f"The analysis covers **{len(merged)}** employees: "
+    f"**{n_admin}** in the original Administration group and "
+    f"**{n_art}** who moved from departments."
+)
+```
+
+
+## Overall Salary Changes
+
+```{python}
+summary = (
+    merged.groupby("group")
+    .agg(
+        n=("pct_change", "size"),
+        median_start=("salary_start", "median"),
+        median_end=("salary_end", "median"),
+        median_pct=("pct_change", "median"),
+        mean_pct=("pct_change", "mean"),
+        pct_25=("pct_change", lambda x: np.percentile(x, 25)),
+        pct_75=("pct_change", lambda x: np.percentile(x, 75)),
+    )
+    .reset_index()
+)
+
+display_summary = summary.copy()
+display_summary.columns = [
+    "Group", "N", "Median Salary (Start)", "Median Salary (End)",
+    "Median % Change", "Mean % Change", "25th %ile", "75th %ile",
+]
+for c in ["Median Salary (Start)", "Median Salary (End)"]:
+    display_summary[c] = display_summary[c].map("${:,.0f}".format)
+for c in ["Median % Change", "Mean % Change", "25th %ile", "75th %ile"]:
+    display_summary[c] = display_summary[c].map("{:.1f}%".format)
+
+Markdown(display_summary.to_markdown(index=False))
+```
+
+```{python}
+fig = px.box(
+    merged,
+    x="group",
+    y="pct_change",
+    color="group",
+    points="all",
+    color_discrete_sequence=["#0072B2", "#E69F00"],
+    labels={"pct_change": "Salary % Change", "group": ""},
+    title=f"Distribution of Salary % Change ({start_date} → {end_date})",
+)
+fig.update_layout(showlegend=False, height=450)
+fig.show()
+```
+
+
+## Breakdown by Job Function
+
+Leadership is shown separately because these roles (deans, assistant deans,
+directors) were part of the original administration and are not drawn from
+departments.
+
+```{python}
+cat_summary = (
+    merged.groupby(["category", "group"])
+    .agg(
+        n=("pct_change", "size"),
+        median_start=("salary_start", "median"),
+        median_end=("salary_end", "median"),
+        median_pct=("pct_change", "median"),
+        mean_pct=("pct_change", "mean"),
+    )
+    .reset_index()
+    .sort_values(["category", "group"])
+)
+
+cat_display = cat_summary.copy()
+cat_display.columns = [
+    "Job Function", "Group", "N", "Median Start", "Median End",
+    "Median % Change", "Mean % Change",
+]
+for c in ["Median Start", "Median End"]:
+    cat_display[c] = cat_display[c].map("${:,.0f}".format)
+for c in ["Median % Change", "Mean % Change"]:
+    cat_display[c] = cat_display[c].map("{:.1f}%".format)
+
+Markdown(cat_display.to_markdown(index=False))
+```
+
+```{python}
+# Grouped bar chart: median % change by category and group
+cat_plot = (
+    merged.groupby(["category", "group"])["pct_change"]
+    .median()
+    .reset_index()
+)
+
+fig2 = px.bar(
+    cat_plot,
+    x="category",
+    y="pct_change",
+    color="group",
+    barmode="group",
+    color_discrete_sequence=["#0072B2", "#E69F00"],
+    labels={
+        "pct_change": "Median Salary % Change",
+        "category": "Job Function",
+        "group": "Group",
+    },
+    title="Median Salary % Change by Job Function and Group",
+)
+fig2.update_layout(height=450)
+fig2.show()
+```
+
+
+## Salary Change Distributions by Job Function
+
+```{python}
+# Exclude categories with fewer than 3 people in either group
+cat_counts = merged.groupby(["category", "group"]).size().unstack(fill_value=0)
+valid_cats = cat_counts[cat_counts.min(axis=1) >= 3].index.tolist()
+plot_data = merged[merged["category"].isin(valid_cats)]
+
+fig3 = px.box(
+    plot_data,
+    x="category",
+    y="pct_change",
+    color="group",
+    color_discrete_sequence=["#0072B2", "#E69F00"],
+    labels={
+        "pct_change": "Salary % Change",
+        "category": "Job Function",
+        "group": "Group",
+    },
+    title="Salary % Change Distributions (categories with ≥ 3 in each group)",
+)
+fig3.update_layout(height=450)
+fig3.show()
+```
+
+
+## Timeline: When Were Employees Moved?
+
+```{python}
+# For ART employees, find first snapshot where they appear in Administration
+art_people = merged[merged["group"] == "ART (from departments)"]["name_key"].unique()
+
+move_dates = {}
+for d in sorted(frames.keys()):
+    df_snap = frames[d]
+    in_admin = df_snap[
+        df_snap["department"].isin(ADMIN_DEPTS)
+        & df_snap["name_key"].isin(art_people)
+    ]["name_key"].unique()
+    for nk in in_admin:
+        if nk not in move_dates:
+            move_dates[nk] = d
+
+merged["move_date"] = merged["name_key"].map(move_dates)
+merged.loc[merged["group"] == "Administration (original)", "move_date"] = "Already in Admin"
+
+move_summary = (
+    merged[merged["group"] == "ART (from departments)"]
+    .groupby("move_date")
+    .agg(
+        n=("pct_change", "size"),
+        median_pct=("pct_change", "median"),
+        mean_pct=("pct_change", "mean"),
+    )
+    .reset_index()
+)
+move_summary.columns = ["Moved to Admin", "N", "Median % Change", "Mean % Change"]
+for c in ["Median % Change", "Mean % Change"]:
+    move_summary[c] = move_summary[c].map("{:.1f}%".format)
+
+Markdown(move_summary.to_markdown(index=False))
+```
+
+```{python}
+# Scatter: salary change vs move date, with jitter
+art_df = merged[merged["group"] == "ART (from departments)"].copy()
+fig4 = px.strip(
+    art_df,
+    x="move_date",
+    y="pct_change",
+    color="category",
+    labels={
+        "pct_change": "Salary % Change",
+        "move_date": "Date Moved to Admin",
+        "category": "Job Function",
+    },
+    title="Salary Changes for ART Employees by Move Date",
+)
+fig4.update_layout(height=450)
+fig4.show()
+```
+
+
+## Source Departments
+
+Where did the ART employees come from, and how did their raises compare?
+
+```{python}
+dept_summary = (
+    merged[merged["group"] == "ART (from departments)"]
+    .groupby("source_dept")
+    .agg(
+        n=("pct_change", "size"),
+        median_pct=("pct_change", "median"),
+        median_start=("salary_start", "median"),
+        median_end=("salary_end", "median"),
+    )
+    .reset_index()
+    .sort_values("n", ascending=False)
+)
+
+dept_display = dept_summary.copy()
+dept_display.columns = [
+    "Source Department", "N", "Median % Change",
+    "Median Start Salary", "Median End Salary",
+]
+for c in ["Median Start Salary", "Median End Salary"]:
+    dept_display[c] = dept_display[c].map("${:,.0f}".format)
+dept_display["Median % Change"] = dept_display["Median % Change"].map("{:.1f}%".format)
+
+Markdown(dept_display.to_markdown(index=False))
+```
+
+
+## Individual Employee Detail
+
+```{python}
+from itables import show
+
+# Rows from the analysis (present in both snapshots)
+detail_analysis = merged[
+    ["first_name", "last_name", "group", "category", "title_start",
+     "title_end", "source_dept", "fte_start", "fte_end",
+     "salary_start", "salary_end",
+     "salary_change", "pct_change", "move_date"]
+].copy()
+
+# All current admin employees not already in the analysis (new hires / not in 2024-04)
+current_nks = set(merged["name_key"])
+new_admin = end_admin[
+    ~end_admin["name_key"].isin(current_nks)
+].copy()
+new_admin["group"] = "New (not in analysis)"
+new_admin["category"] = new_admin["title"].apply(categorize_title)
+new_admin["title_start"] = ""
+new_admin["source_dept"] = ""
+new_admin["fte_start"] = np.nan
+new_admin["salary_start"] = np.nan
+new_admin["salary_change"] = np.nan
+new_admin["pct_change"] = np.nan
+new_admin["move_date"] = ""
+new_admin = new_admin.rename(columns={
+    "title": "title_end",
+    "salary": "salary_end",
+    "fte": "fte_end",
+})
+
+detail_new = new_admin[
+    ["first_name", "last_name", "group", "category", "title_start",
+     "title_end", "source_dept", "fte_start", "fte_end",
+     "salary_start", "salary_end",
+     "salary_change", "pct_change", "move_date"]
+]
+
+detail = pd.concat([detail_analysis, detail_new], ignore_index=True)
+detail = detail.sort_values(["group", "category", "pct_change"], ascending=[True, True, False])
+detail.columns = [
+    "First Name", "Last Name", "Group", "Job Function",
+    f"Title ({start_date})", f"Title ({end_date})", "Source Dept",
+    f"FTE ({start_date})", f"FTE ({end_date})",
+    f"Salary ({start_date})", f"Salary ({end_date})",
+    "$ Change", "% Change", "Move Date",
+]
+detail[f"Salary ({start_date})"] = detail[f"Salary ({start_date})"].apply(
+    lambda x: "${:,.0f}".format(x) if pd.notna(x) else ""
+)
+detail[f"Salary ({end_date})"] = detail[f"Salary ({end_date})"].map("${:,.0f}".format)
+detail["$ Change"] = detail["$ Change"].apply(
+    lambda x: "${:,.0f}".format(x) if pd.notna(x) else ""
+)
+detail["% Change"] = detail["% Change"].apply(
+    lambda x: "{:.1f}%".format(x) if pd.notna(x) else ""
+)
+detail[f"FTE ({start_date})"] = detail[f"FTE ({start_date})"].apply(
+    lambda x: "{:.2f}".format(x) if pd.notna(x) else ""
+)
+
+show(detail, paging=True, pageLength=25, searching=True, ordering=True)
+```
+
+## Administrative Position FTE: Before and After Consolidation
+
+This section counts total FTE across all of L&S (departments and administration
+combined) for administrative function titles, comparing `{python} start_date`
+to `{python} end_date`. This shows whether the consolidation changed the overall
+number of administrative positions, not just where they sit.
+
+```{python}
+# Load CPI data (fetched from FRED) to inflate 2024-04 salaries to 2026-03 dollars.
+# March 2026 CPI is not yet released; we use the latest available month as proxy.
+cpi = pd.read_csv("data/cpi_data.csv")
+cpi_start = cpi.loc[cpi["Date"] == "2024-04-01", "CPI"].values[0]
+cpi_latest = cpi.dropna(subset=["CPI"]).sort_values("Date").iloc[-1]
+cpi_end = cpi_latest["CPI"]
+cpi_end_date = cpi_latest["Date"][:7]  # e.g. "2026-02"
+cpi_factor = cpi_end / cpi_start  # multiply 2024-04 salaries by this
+
+# Load full L&S snapshots (all departments, not just admin)
+ls_start = df_start[df_start["fte"] > 0].copy()
+ls_end = df_end[df_end["fte"] > 0].copy()
+
+# Compute FTE-adjusted total pay and inflate start salaries to end dollars
+ls_start["total_pay"] = ls_start["salary"] * ls_start["fte"] * cpi_factor
+ls_end["total_pay"] = ls_end["salary"] * ls_end["fte"]
+
+ls_start["category"] = ls_start["title"].apply(categorize_title)
+ls_end["category"] = ls_end["title"].apply(categorize_title)
+
+# Keep only admin-function titles (exclude "Other" which is faculty/research/etc.)
+admin_cats = ["Finance", "HR", "Research Admin", "IT", "Leadership", "Dept Admin", "Communications"]
+ls_start_admin = ls_start[ls_start["category"].isin(admin_cats)]
+ls_end_admin = ls_end[ls_end["category"].isin(admin_cats)]
+```
+
+All salary totals in this section are expressed in **`{python} end_date` dollars**
+(2024-04 figures inflated by CPI factor of `{python} f"{cpi_factor:.4f}"`, using
+`{python} cpi_end_date` CPI from FRED as the latest available).
+
+### Overall FTE by Job Function
+
+```{python}
+fte_start = ls_start_admin.groupby("category")["fte"].sum()
+fte_end = ls_end_admin.groupby("category")["fte"].sum()
+pay_start = ls_start_admin.groupby("category")["total_pay"].sum()
+pay_end = ls_end_admin.groupby("category")["total_pay"].sum()
+
+fte_compare = pd.DataFrame({
+    f"FTE ({start_date})": fte_start,
+    f"FTE ({end_date})": fte_end,
+    f"Salary ({start_date})": pay_start,
+    f"Salary ({end_date})": pay_end,
+}).fillna(0)
+fte_compare["FTE Change"] = fte_compare[f"FTE ({end_date})"] - fte_compare[f"FTE ({start_date})"]
+fte_compare["Salary Change"] = fte_compare[f"Salary ({end_date})"] - fte_compare[f"Salary ({start_date})"]
+fte_compare["FTE % Chg"] = (
+    fte_compare["FTE Change"] / fte_compare[f"FTE ({start_date})"] * 100
+)
+fte_compare["Salary % Chg"] = (
+    fte_compare["Salary Change"] / fte_compare[f"Salary ({start_date})"] * 100
+)
+
+# Add totals row
+totals = fte_compare.sum()
+totals["FTE % Chg"] = totals["FTE Change"] / totals[f"FTE ({start_date})"] * 100
+totals["Salary % Chg"] = totals["Salary Change"] / totals[f"Salary ({start_date})"] * 100
+fte_compare.loc["TOTAL"] = totals
+
+fte_display = fte_compare.copy()
+for c in [f"FTE ({start_date})", f"FTE ({end_date})", "FTE Change"]:
+    fte_display[c] = fte_display[c].map("{:+.1f}".format if "Change" in c else "{:.1f}".format)
+for c in [f"Salary ({start_date})", f"Salary ({end_date})"]:
+    fte_display[c] = fte_display[c].map("${:,.0f}".format)
+fte_display["Salary Change"] = fte_display["Salary Change"].map("${:+,.0f}".format)
+fte_display["FTE % Chg"] = fte_display["FTE % Chg"].map("{:+.1f}%".format)
+fte_display["Salary % Chg"] = fte_display["Salary % Chg"].map("{:+.1f}%".format)
+fte_display.index.name = "Job Function"
+
+Markdown(fte_display.to_markdown())
+```
+
+```{python}
+# Bar chart: before/after by category
+fte_plot = fte_compare.drop("TOTAL").reset_index()
+fte_plot = fte_plot.rename(columns={"category": "Job Function"})
+fte_melt = fte_plot.melt(
+    id_vars="Job Function",
+    value_vars=[f"FTE ({start_date})", f"FTE ({end_date})"],
+    var_name="Snapshot",
+    value_name="FTE",
+)
+
+fig_fte = px.bar(
+    fte_melt,
+    x="Job Function",
+    y="FTE",
+    color="Snapshot",
+    barmode="group",
+    color_discrete_sequence=["#0072B2", "#E69F00"],
+    title=f"Administrative FTE Across All of L&S: {start_date} vs {end_date}",
+)
+fig_fte.update_layout(height=450)
+fig_fte.show()
+```
+
+### FTE by Title
+
+```{python}
+title_start = (
+    ls_start_admin.groupby(["category", "title"])
+    .agg(fte_start=("fte", "sum"), n_start=("fte", "size"),
+         pay_start=("total_pay", "sum"))
+    .reset_index()
+)
+title_end = (
+    ls_end_admin.groupby(["category", "title"])
+    .agg(fte_end=("fte", "sum"), n_end=("fte", "size"),
+         pay_end=("total_pay", "sum"))
+    .reset_index()
+)
+
+title_compare = title_start.merge(
+    title_end, on=["category", "title"], how="outer"
+).fillna(0)
+title_compare["fte_change"] = title_compare["fte_end"] - title_compare["fte_start"]
+title_compare["pay_change"] = title_compare["pay_end"] - title_compare["pay_start"]
+title_compare = title_compare.sort_values(["category", "fte_change"])
+
+title_display = title_compare.copy()
+title_display.columns = [
+    "Job Function", "Title",
+    f"FTE ({start_date})", f"N ({start_date})", f"Salary ({start_date})",
+    f"FTE ({end_date})", f"N ({end_date})", f"Salary ({end_date})",
+    "FTE Change", "Salary Change",
+]
+title_display[f"N ({start_date})"] = title_display[f"N ({start_date})"].astype(int)
+title_display[f"N ({end_date})"] = title_display[f"N ({end_date})"].astype(int)
+title_display[f"FTE ({start_date})"] = title_display[f"FTE ({start_date})"].map("{:.1f}".format)
+title_display[f"FTE ({end_date})"] = title_display[f"FTE ({end_date})"].map("{:.1f}".format)
+title_display["FTE Change"] = title_display["FTE Change"].map("{:+.1f}".format)
+for c in [f"Salary ({start_date})", f"Salary ({end_date})"]:
+    title_display[c] = title_display[c].map("${:,.0f}".format)
+title_display["Salary Change"] = title_display["Salary Change"].map("${:+,.0f}".format)
+
+show(title_display, paging=True, pageLength=25, searching=True, ordering=True)
+```
+
+### Where Are the Positions? Administration vs Departments
+
+```{python}
+# Split FTE into "in Administration" vs "in Departments" for each snapshot
+ls_start_admin_loc = ls_start_admin.copy()
+ls_start_admin_loc["location"] = np.where(
+    ls_start_admin_loc["department"].isin(ADMIN_DEPTS),
+    "Administration", "Departments"
+)
+ls_end_admin_loc = ls_end_admin.copy()
+ls_end_admin_loc["location"] = np.where(
+    ls_end_admin_loc["department"].isin(ADMIN_DEPTS),
+    "Administration", "Departments"
+)
+
+# FTE by location
+loc_fte_start = (
+    ls_start_admin_loc.groupby(["category", "location"])["fte"]
+    .sum().unstack(fill_value=0).add_prefix(f"{start_date} FTE ")
+)
+loc_fte_end = (
+    ls_end_admin_loc.groupby(["category", "location"])["fte"]
+    .sum().unstack(fill_value=0).add_prefix(f"{end_date} FTE ")
+)
+# Salary by location
+loc_pay_start = (
+    ls_start_admin_loc.groupby(["category", "location"])["total_pay"]
+    .sum().unstack(fill_value=0).add_prefix(f"{start_date} $ ")
+)
+loc_pay_end = (
+    ls_end_admin_loc.groupby(["category", "location"])["total_pay"]
+    .sum().unstack(fill_value=0).add_prefix(f"{end_date} $ ")
+)
+
+loc_compare = pd.concat([loc_fte_start, loc_fte_end, loc_pay_start, loc_pay_end], axis=1).fillna(0)
+
+# Ensure all columns exist
+for prefix in [f"{start_date} FTE", f"{end_date} FTE", f"{start_date} $", f"{end_date} $"]:
+    for loc in ["Administration", "Departments"]:
+        c = f"{prefix} {loc}"
+        if c not in loc_compare.columns:
+            loc_compare[c] = 0.0
+
+# Compute totals
+for d in [start_date, end_date]:
+    loc_compare[f"{d} FTE Total"] = loc_compare[f"{d} FTE Administration"] + loc_compare[f"{d} FTE Departments"]
+    loc_compare[f"{d} $ Total"] = loc_compare[f"{d} $ Administration"] + loc_compare[f"{d} $ Departments"]
+loc_compare["FTE Net Chg"] = loc_compare[f"{end_date} FTE Total"] - loc_compare[f"{start_date} FTE Total"]
+loc_compare["$ Net Chg"] = loc_compare[f"{end_date} $ Total"] - loc_compare[f"{start_date} $ Total"]
+
+totals = loc_compare.sum()
+loc_compare.loc["TOTAL"] = totals
+
+# Display: FTE table
+fte_cols = [f"{start_date} FTE Administration", f"{start_date} FTE Departments", f"{start_date} FTE Total",
+            f"{end_date} FTE Administration", f"{end_date} FTE Departments", f"{end_date} FTE Total", "FTE Net Chg"]
+loc_fte_display = loc_compare[fte_cols].copy()
+loc_fte_display.columns = [f"{start_date} Admin", f"{start_date} Depts", f"{start_date} Total",
+                           f"{end_date} Admin", f"{end_date} Depts", f"{end_date} Total", "Net Change"]
+for c in loc_fte_display.columns:
+    loc_fte_display[c] = loc_fte_display[c].map("{:+.1f}".format if "Net" in c else "{:.1f}".format)
+loc_fte_display.index.name = "Job Function"
+
+Markdown("**FTE**\n\n" + loc_fte_display.to_markdown())
+```
+
+```{python}
+# Display: Salary table
+pay_cols = [f"{start_date} $ Administration", f"{start_date} $ Departments", f"{start_date} $ Total",
+            f"{end_date} $ Administration", f"{end_date} $ Departments", f"{end_date} $ Total", "$ Net Chg"]
+loc_pay_display = loc_compare[pay_cols].copy()
+loc_pay_display.columns = [f"{start_date} Admin", f"{start_date} Depts", f"{start_date} Total",
+                           f"{end_date} Admin", f"{end_date} Depts", f"{end_date} Total", "Net Change"]
+for c in loc_pay_display.columns:
+    if "Net" in c:
+        loc_pay_display[c] = loc_pay_display[c].map("${:+,.0f}".format)
+    else:
+        loc_pay_display[c] = loc_pay_display[c].map("${:,.0f}".format)
+loc_pay_display.index.name = "Job Function"
+
+Markdown("**Total Salary (in " + end_date + " dollars)**\n\n" + loc_pay_display.to_markdown())
+```
+
+```{python}
+# Stacked bar: Administration vs Departments, before and after
+loc_plot_data = []
+for cat in loc_compare.drop("TOTAL").index:
+    for period, date in [("Before", start_date), ("After", end_date)]:
+        loc_plot_data.append({
+            "Job Function": cat,
+            "Period": f"{period} ({date})",
+            "Administration": loc_compare.loc[cat, f"{date} FTE Administration"],
+            "Departments": loc_compare.loc[cat, f"{date} FTE Departments"],
+        })
+loc_plot_df = pd.DataFrame(loc_plot_data)
+loc_melt = loc_plot_df.melt(
+    id_vars=["Job Function", "Period"],
+    value_vars=["Administration", "Departments"],
+    var_name="Location",
+    value_name="FTE",
+)
+
+fig_loc = px.bar(
+    loc_melt,
+    x="Job Function",
+    y="FTE",
+    color="Location",
+    facet_col="Period",
+    color_discrete_sequence=["#0072B2", "#E69F00"],
+    title="Administrative FTE: Where Positions Sit Before vs After Consolidation",
+)
+fig_loc.update_layout(height=450)
+fig_loc.show()
+```
+
+---
+
+*Data sources: UW-Madison public salary records, `{python} start_date` through
+`{python} end_date`. Salary analysis is limited to employees present in both
+snapshots. The employee detail table also includes employees currently in L&S
+Administration who were not present in the `{python} start_date` snapshot
+(shown as "New (not in analysis)"). Position FTE counts cover all of L&S.*
