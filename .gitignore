@@ -58,6 +58,13 @@ tmpclaude-*
 # Output files (uncomment if you don't want to track generated CSVs)
 # *.csv
 
+# Rendered report output (regenerate with quarto render)
+reports/*.html
+
+# R
+.Rhistory
+.RData
+
 # Credentials and API keys
 .env
 *.key

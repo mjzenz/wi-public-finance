@@ -4,7 +4,30 @@
       "Bash(py -3 -c:*)",
       "Bash(py -3 -m pip install:*)",
       "Bash(py -3 -m py_compile salary_app.py)",
-      "Bash(timeout 10 py:*)"
+      "Bash(timeout 10 py:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(python -c:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(__NEW_LINE_dc9b082cca8efc82__ cd:*)",
+      "Bash(sed 's/.*\\\\.//')",
+      "Bash(quarto --version)",
+      "Bash(quarto check:*)",
+      "Bash(pip show:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(py --version)",
+      "Bash(py -0p)",
+      "Bash(where jupyter:*)",
+      "Bash(jupyter --version)",
+      "Bash(jupyter kernelspec:*)",
+      "Bash(C:/Users/mjzen/anaconda3/python.exe -c \"\nimport importlib\nfor pkg in ['pandas', 'numpy', 'openpyxl', 'plotly', 'itables', 'fredapi', 'keyring']:\n    try:\n        m = importlib.import_module\\(pkg\\)\n        v = getattr\\(m, '__version__', 'OK'\\)\n        print\\(f'  {pkg}: {v}'\\)\n    except ImportError:\n        print\\(f'  {pkg}: MISSING'\\)\n\" 2>&1)",
+      "Bash(C:/Users/mjzen/anaconda3/python.exe -m pip install itables 2>&1)",
+      "Bash(git status:*)"
     ]
   }
 }

@@ -9,8 +9,6 @@ Usage:
     python fetch_cpi.py
 """
 import pandas as pd
-import keyring
-from fredapi import Fred
 import config
 
 
@@ -30,6 +28,9 @@ def fetch_and_save_cpi(api_key=None, output_path=None):
     pd.DataFrame
         CPI data with Date and CPI columns.
     """
+    import keyring
+    from fredapi import Fred
+
     if api_key is None:
         api_key = keyring.get_password("fredapi", "fredapi")
 

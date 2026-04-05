@@ -333,6 +333,96 @@ def normalize_columns(df, file_format):
     return df
 
 
+def deduplicate_appointments(salaries):
+    """
+    Remove duplicate and overlapping appointments for the same employee.
+
+    Workday (and sometimes UFAS) data can contain multiple rows for the same
+    employee in a single snapshot. This function handles three cases:
+
+    1. **Exact duplicates**: Identical rows (same id, Date, title, salary,
+       division, department) are collapsed to one row.
+    2. **Over-allocated FTE (> MAX_TOTAL_FTE)**: When a person's total FTE
+       exceeds the threshold (default 1.4), rows are pruned:
+       - If the person has a "Limited" appointment (leadership/director roles),
+         the Limited row is kept as the primary position.
+       - Otherwise, the highest-salary row is kept as primary.
+       - Additional fractional appointments are kept as long as cumulative
+         FTE stays at or below MAX_TOTAL_FTE.
+    3. **Legitimate split appointments**: Multiple rows with total FTE
+       at or below MAX_TOTAL_FTE are left untouched.
+
+    Parameters
+    ----------
+    salaries : pd.DataFrame
+        Salary data with at least columns: id, Date, title,
+        current_annual_contracted_salary, full_time_equivalent,
+        division, department, employee_category.
+
+    Returns
+    -------
+    pd.DataFrame
+        Deduplicated salary data.
+    """
+    max_fte = config.MAX_TOTAL_FTE
+
+    # Step 1: Remove exact duplicate rows
+    dedup_cols = ['id', 'Date', 'title', 'current_annual_contracted_salary',
+                  'full_time_equivalent', 'division', 'department']
+    existing_dedup_cols = [c for c in dedup_cols if c in salaries.columns]
+    before = len(salaries)
+    salaries = salaries.drop_duplicates(subset=existing_dedup_cols, keep='first')
+    exact_dups = before - len(salaries)
+    if exact_dups > 0:
+        print(f"  Removed {exact_dups} exact duplicate rows.")
+
+    # Step 2: Handle over-allocated FTE
+    fte_totals = salaries.groupby(['id', 'Date'])['full_time_equivalent'].transform('sum')
+    over_mask = fte_totals > max_fte
+
+    if over_mask.any():
+        ok_rows = salaries[~over_mask]
+        problem_rows = salaries[over_mask]
+        kept_rows = []
+
+        for (eid, date), group in problem_rows.groupby(['id', 'Date']):
+            is_limited = group['employee_category'].str.contains('Limited', case=False, na=False)
+            has_limited = is_limited.any()
+
+            if has_limited:
+                # Primary = highest-salary Limited row
+                limited = group[is_limited]
+                non_limited = group[~is_limited]
+                primary = limited.loc[limited['current_annual_contracted_salary'].idxmax()]
+                others = pd.concat([
+                    limited.drop(primary.name),
+                    non_limited
+                ]).sort_values('current_annual_contracted_salary', ascending=False)
+            else:
+                # Primary = highest-salary row
+                primary = group.loc[group['current_annual_contracted_salary'].idxmax()]
+                others = group.drop(primary.name).sort_values(
+                    'current_annual_contracted_salary', ascending=False)
+
+            keep = [primary.name]
+            cumulative_fte = primary['full_time_equivalent']
+
+            for idx, row in others.iterrows():
+                if cumulative_fte + row['full_time_equivalent'] <= max_fte:
+                    keep.append(idx)
+                    cumulative_fte += row['full_time_equivalent']
+
+            kept_rows.append(group.loc[keep])
+
+        pruned = pd.concat(kept_rows)
+        removed = len(problem_rows) - len(pruned)
+        salaries = pd.concat([ok_rows, pruned])
+        if removed > 0:
+            print(f"  Removed {removed} over-allocated FTE rows (threshold: {max_fte}).")
+
+    return salaries
+
+
 def clean_salary_data(filenames, job_metadata=None):
     """
     Clean and combine salary data from multiple Excel files.
@@ -456,18 +546,26 @@ def clean_salary_data(filenames, job_metadata=None):
     salaries['_name_key'] = (salaries['last_name'].str.upper().str.strip() + '|' +
                              salaries['first_name'].str.upper().str.strip())
 
-    # Get UFAS records and build name -> hire_date mapping (use earliest hire date)
+    # Get UFAS records and build name -> hire_date mapping
+    # Only override Workday hire dates when the name is unambiguous in UFAS
+    # (i.e., only one distinct hire date for that name). When multiple people
+    # share the same name with different hire dates, leave Workday dates as-is
+    # to avoid collapsing distinct employees into one ID.
     ufas_records = salaries[salaries['Date'] < ufas_cutoff].copy()
     if len(ufas_records) > 0:
-        # For each name, get the earliest (most likely original) hire date from UFAS
-        ufas_hire_dates = ufas_records.groupby('_name_key')['date_of_hire'].min().to_dict()
+        ufas_hire_dates = (
+            ufas_records.groupby('_name_key')['date_of_hire']
+            .agg(['min', 'nunique'])
+        )
+        # Only use names that have exactly one distinct hire date in UFAS
+        unique_names = ufas_hire_dates[ufas_hire_dates['nunique'] == 1]['min'].to_dict()
 
-        # Apply UFAS hire dates to Workday records where names match
+        # Apply UFAS hire dates to Workday records where names match uniquely
         workday_mask = salaries['Date'] >= ufas_cutoff
         for idx in salaries[workday_mask].index:
             name_key = salaries.loc[idx, '_name_key']
-            if name_key in ufas_hire_dates:
-                salaries.loc[idx, 'date_of_hire'] = ufas_hire_dates[name_key]
+            if name_key in unique_names:
+                salaries.loc[idx, 'date_of_hire'] = unique_names[name_key]
 
     # Clean up temporary column
     salaries = salaries.drop(columns=['_name_key'])
@@ -479,6 +577,9 @@ def clean_salary_data(filenames, job_metadata=None):
     salaries['employee_category'] = salaries['employee_category'].replace(
         config.EMPLOYEE_CATEGORIES
     )
+
+    # Remove duplicate and over-allocated appointments
+    salaries = deduplicate_appointments(salaries)
 
     # Normalize jobcodes to 5 characters (strip U, A, X, N suffixes)
     # These suffixes indicate variants but the base 5-char code is the actual job classification
@@ -509,10 +610,19 @@ def clean_salary_data(filenames, job_metadata=None):
     salaries['JobNumber'] = salaries['jobcode'].str[2:]
 
     # Merge CPI data for inflation adjustment
+    # Use nearest prior CPI when exact month is unavailable (e.g., latest month not yet released)
     salaries = salaries.merge(cpi_data[['Date', 'CPI', 'CPI_2021_Index']], on='Date', how='left')
+    if salaries['CPI'].isna().any():
+        latest_cpi = cpi_data.dropna(subset=['CPI']).sort_values('Date').iloc[-1]
+        salaries['CPI'] = salaries['CPI'].fillna(latest_cpi['CPI'])
+        salaries['CPI_2021_Index'] = salaries['CPI_2021_Index'].fillna(latest_cpi['CPI_2021_Index'])
     salaries['2021_Index'] = salaries['CPI_2021_Index']
     salaries['FTE_Adjusted_Salary_2021_Dollars'] = (
         salaries['fte_adjusted_salary'] * salaries['2021_Index']
+    )
+    # Non-FTE-adjusted real salary (for apples-to-apples rate comparisons)
+    salaries['Real_Salary_2021_Dollars'] = (
+        salaries['current_annual_contracted_salary'] * salaries['2021_Index']
     )
 
     # Merge job metadata if available

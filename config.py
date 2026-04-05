@@ -182,11 +182,16 @@ UFAS_COLUMN_RENAMES = {
 
 WORKDAY_COLUMN_RENAMES = {
     'annual_full_salary': 'current_annual_contracted_salary',
+    'annualized_rate_amount': 'current_annual_contracted_salary',
     'full-time_equivalent': 'full_time_equivalent',
+    'fte': 'full_time_equivalent',
     'job_code': 'jobcode',
     'employee_contract_type': 'appt_type_length',
     'date_of_hire': 'date_of_hire',
 }
+
+# Maximum total FTE allowed per person per snapshot before deduplication kicks in
+MAX_TOTAL_FTE = 1.4
 
 # Columns to drop if present
 COLUMNS_TO_DROP = ['annual_fte_adjusted_salary', 'pay_basis', 'compensation_basis']

@@ -13,6 +13,7 @@ keyring>=24.0.0          # Secure credential storage
 # Web application
 streamlit>=1.28.0
 plotly>=5.18.0           # Interactive charts
+itables>=2.0.0           # Interactive tables in Quarto reports
 
 # Optional: for running the job scraper
 # requests>=2.31.0

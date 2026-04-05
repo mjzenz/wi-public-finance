@@ -1,0 +1,802 @@
+---
+title: "College of Letters & Science: Salary & FTE Expenditure Analysis"
+subtitle: "L&S Trends, 2021–2026"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+execute:
+  echo: false
+  warning: false
+---
+
+```{python}
+import pandas as pd
+import numpy as np
+import sys
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from IPython.display import Markdown
+
+sys.path.insert(0, "..")
+from import_data import read_salary_file_names, clean_salary_data
+
+# ---------------------------------------------------------------------------
+# Load cleaned data via pipeline, filter to L&S
+# ---------------------------------------------------------------------------
+
+files = read_salary_file_names()
+df_all = clean_salary_data(files)
+
+# Filter to L&S and exclude zero-FTE courtesy appointments
+df = df_all[
+    (df_all["division"] == "College of Letters & Science") &
+    (df_all["full_time_equivalent"] > 0)
+].copy()
+
+# ---------------------------------------------------------------------------
+# Department classification: Administration vs Academic
+# ---------------------------------------------------------------------------
+
+ADMIN_DEPTS = ["Letters & Science Administration", "Administration",
+               "Student Academic Affairs"]
+
+
+def classify_dept(d):
+    if d in ADMIN_DEPTS:
+        return "Administration & Student Services"
+    return "Academic Departments"
+
+
+df["dept_type"] = df["department"].apply(classify_dept)
+
+# Key dates
+all_dates = sorted(df["Date"].unique())
+start_date = all_dates[0]
+end_date = all_dates[-1]
+start_label = f"{start_date:%Y-%m}"
+end_label = f"{end_date:%Y-%m}"
+
+# Color palette (colorblind-friendly Wong palette)
+WONG = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00",
+        "#56B4E9", "#F0E442", "#999999"]
+```
+
+
+## Overview
+
+This report analyzes salary expenditure and FTE trends within the
+**College of Letters & Science** from
+**`{python} start_label`** through **`{python} end_label`**
+(`{python} len(all_dates)` snapshots). All salary figures are expressed in
+**inflation-adjusted 2021 dollars** unless otherwise noted, using
+CPI data from the Federal Reserve (FRED series CPIAUCSL).
+
+Departments are grouped into two types:
+
+- **Administration & Student Services**: L&S Administration, Student Academic Affairs
+- **Academic Departments**: all other L&S departments
+
+```{python}
+snap_latest = df[df["Date"] == end_date]
+n_depts = snap_latest["department"].nunique()
+Markdown(
+    f"**Latest snapshot ({end_label}):** "
+    f"{snap_latest['id'].nunique():,} employees across {n_depts} departments, "
+    f"{snap_latest['full_time_equivalent'].sum():,.0f} FTE, "
+    f"${snap_latest['FTE_Adjusted_Salary_2021_Dollars'].sum():,.0f} "
+    f"total salary expenditure (2021 dollars)."
+)
+```
+
+
+## L&S-Wide Trends
+
+### Total FTE and Salary Expenditure Over Time
+
+```{python}
+trends = df.groupby("Date").agg(
+    employees=("id", "nunique"),
+    total_fte=("full_time_equivalent", "sum"),
+    total_salary_nominal=("fte_adjusted_salary", "sum"),
+    total_salary_real=("FTE_Adjusted_Salary_2021_Dollars", "sum"),
+).reset_index()
+trends["date_str"] = trends["Date"].dt.strftime("%Y-%m")
+trends["salary_per_fte_real"] = trends["total_salary_real"] / trends["total_fte"]
+
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=("Total FTE", "Total Salary Expenditure (2021 $)"),
+)
+fig.add_trace(
+    go.Scatter(x=trends["date_str"], y=trends["total_fte"],
+               mode="lines+markers", name="FTE", line=dict(color=WONG[0])),
+    row=1, col=1,
+)
+fig.add_trace(
+    go.Scatter(x=trends["date_str"],
+               y=trends["total_salary_real"],
+               mode="lines+markers", name="Salary (2021 $)",
+               line=dict(color=WONG[1])),
+    row=1, col=2,
+)
+fig.update_yaxes(title_text="FTE", row=1, col=1)
+fig.update_yaxes(title_text="Dollars (2021)", row=1, col=2)
+fig.update_layout(height=400, showlegend=False,
+                  title_text="L&S FTE and Salary Trends")
+fig.show()
+```
+
+```{python}
+trends_display = trends[["date_str", "employees", "total_fte",
+                          "total_salary_real", "salary_per_fte_real"]].copy()
+trends_display.columns = ["Snapshot", "Employees", "Total FTE",
+                           "Total Salary (2021 $)", "Salary per FTE (2021 $)"]
+trends_display["Total FTE"] = trends_display["Total FTE"].map("{:,.0f}".format)
+trends_display["Total Salary (2021 $)"] = trends_display["Total Salary (2021 $)"].map(
+    "${:,.0f}".format)
+trends_display["Salary per FTE (2021 $)"] = trends_display["Salary per FTE (2021 $)"].map(
+    "${:,.0f}".format)
+Markdown(trends_display.to_markdown(index=False))
+```
+
+
+### Trends: Administration vs Academic Departments
+
+```{python}
+type_trends = (
+    df.groupby(["Date", "dept_type"])
+    .agg(
+        total_fte=("full_time_equivalent", "sum"),
+        total_salary_real=("FTE_Adjusted_Salary_2021_Dollars", "sum"),
+    )
+    .reset_index()
+)
+type_trends["date_str"] = type_trends["Date"].dt.strftime("%Y-%m")
+
+fig_type_fte = px.line(
+    type_trends, x="date_str", y="total_fte", color="dept_type",
+    markers=True, color_discrete_sequence=WONG,
+    labels={"total_fte": "FTE", "date_str": "", "dept_type": "Department Type"},
+    title="FTE: Administration vs Academic Departments",
+)
+fig_type_fte.update_layout(height=400)
+fig_type_fte.show()
+```
+
+```{python}
+fig_type_sal = px.line(
+    type_trends, x="date_str", y="total_salary_real", color="dept_type",
+    markers=True, color_discrete_sequence=WONG,
+    labels={"total_salary_real": "Salary (2021 $)", "date_str": "",
+            "dept_type": "Department Type"},
+    title="Total Salary Expenditure (2021 $): Administration vs Academic",
+)
+fig_type_sal.update_layout(height=400)
+fig_type_sal.show()
+```
+
+```{python}
+snap_start = df[df["Date"] == start_date]
+snap_end = df[df["Date"] == end_date]
+
+type_compare = []
+for dept_type in ["Administration & Student Services", "Academic Departments"]:
+    s = snap_start[snap_start["dept_type"] == dept_type]
+    e = snap_end[snap_end["dept_type"] == dept_type]
+    s_fte = s["full_time_equivalent"].sum()
+    e_fte = e["full_time_equivalent"].sum()
+    s_sal = s["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    e_sal = e["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    type_compare.append({
+        "Department Type": dept_type,
+        f"FTE ({start_label})": s_fte,
+        f"FTE ({end_label})": e_fte,
+        "FTE Change": e_fte - s_fte,
+        "FTE % Change": (e_fte - s_fte) / s_fte * 100 if s_fte else 0,
+        f"Salary ({start_label})": s_sal,
+        f"Salary ({end_label})": e_sal,
+        "Salary Change": e_sal - s_sal,
+        "Salary % Change": (e_sal - s_sal) / s_sal * 100 if s_sal else 0,
+    })
+
+tc = pd.DataFrame(type_compare)
+totals = tc.select_dtypes(include="number").sum()
+totals["FTE % Change"] = totals["FTE Change"] / totals[f"FTE ({start_label})"] * 100
+totals["Salary % Change"] = totals["Salary Change"] / totals[f"Salary ({start_label})"] * 100
+totals_row = {"Department Type": "TOTAL", **totals.to_dict()}
+tc = pd.concat([tc, pd.DataFrame([totals_row])], ignore_index=True)
+
+tc_display = tc.copy()
+for c in [f"FTE ({start_label})", f"FTE ({end_label})"]:
+    tc_display[c] = tc_display[c].map("{:,.0f}".format)
+tc_display["FTE Change"] = tc_display["FTE Change"].map("{:+,.0f}".format)
+tc_display["FTE % Change"] = tc_display["FTE % Change"].map("{:+.1f}%".format)
+for c in [f"Salary ({start_label})", f"Salary ({end_label})"]:
+    tc_display[c] = tc_display[c].map("${:,.0f}".format)
+tc_display["Salary Change"] = tc_display["Salary Change"].map("${:+,.0f}".format)
+tc_display["Salary % Change"] = tc_display["Salary % Change"].map("{:+.1f}%".format)
+Markdown(tc_display.to_markdown(index=False))
+```
+
+
+## Department Detail
+
+### FTE Trends by Department (Top 15)
+
+```{python}
+# Top 15 departments by current FTE
+top_depts = (
+    snap_end.groupby("department")["full_time_equivalent"]
+    .sum().nlargest(15).index.tolist()
+)
+
+dept_trends = (
+    df[df["department"].isin(top_depts)]
+    .groupby(["Date", "department"])
+    .agg(total_fte=("full_time_equivalent", "sum"))
+    .reset_index()
+)
+dept_trends["date_str"] = dept_trends["Date"].dt.strftime("%Y-%m")
+
+fig_dept = px.line(
+    dept_trends, x="date_str", y="total_fte", color="department",
+    markers=True,
+    labels={"total_fte": "FTE", "date_str": "", "department": "Department"},
+    title="FTE by Department Over Time (Top 15)",
+)
+fig_dept.update_layout(height=500)
+fig_dept.show()
+```
+
+
+### Salary Expenditure Change by Department
+
+```{python}
+from itables import show
+
+dept_compare = []
+for dept in sorted(df["department"].dropna().unique()):
+    s = snap_start[snap_start["department"] == dept]
+    e = snap_end[snap_end["department"] == dept]
+    s_fte = s["full_time_equivalent"].sum()
+    e_fte = e["full_time_equivalent"].sum()
+    s_sal = s["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    e_sal = e["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    if s_fte == 0 and e_fte == 0:
+        continue
+    dept_compare.append({
+        "Department": dept,
+        "Type": classify_dept(dept),
+        f"FTE ({start_label})": s_fte,
+        f"FTE ({end_label})": e_fte,
+        "FTE Chg": e_fte - s_fte,
+        f"Salary ({start_label})": s_sal,
+        f"Salary ({end_label})": e_sal,
+        "Salary Chg": e_sal - s_sal,
+        "Salary % Chg": (e_sal - s_sal) / s_sal * 100 if s_sal else np.nan,
+    })
+
+dc = pd.DataFrame(dept_compare).sort_values("Salary Chg", ascending=False)
+
+dc_display = dc.copy()
+for c in [f"FTE ({start_label})", f"FTE ({end_label})"]:
+    dc_display[c] = dc_display[c].map("{:,.0f}".format)
+dc_display["FTE Chg"] = dc_display["FTE Chg"].map("{:+,.0f}".format)
+for c in [f"Salary ({start_label})", f"Salary ({end_label})"]:
+    dc_display[c] = dc_display[c].map("${:,.0f}".format)
+dc_display["Salary Chg"] = dc_display["Salary Chg"].map("${:+,.0f}".format)
+dc_display["Salary % Chg"] = dc_display["Salary % Chg"].apply(
+    lambda x: "{:+.1f}%".format(x) if pd.notna(x) else "New")
+
+show(dc_display, paging=True, pageLength=15, searching=True, ordering=True)
+```
+
+
+## Expenditure by Job Group
+
+```{python}
+jg_trends = (
+    df.dropna(subset=["job_group"])
+    .groupby(["Date", "job_group"])
+    .agg(
+        total_fte=("full_time_equivalent", "sum"),
+        total_salary_real=("FTE_Adjusted_Salary_2021_Dollars", "sum"),
+    )
+    .reset_index()
+)
+jg_trends["date_str"] = jg_trends["Date"].dt.strftime("%Y-%m")
+
+top_jg = (
+    jg_trends[jg_trends["Date"] == end_date]
+    .nlargest(10, "total_fte")["job_group"]
+    .tolist()
+)
+
+fig_jg = px.line(
+    jg_trends[jg_trends["job_group"].isin(top_jg)],
+    x="date_str", y="total_salary_real", color="job_group",
+    markers=True,
+    labels={"total_salary_real": "Salary (2021 $)", "date_str": "",
+            "job_group": "Job Group"},
+    title="L&S Salary Expenditure (2021 $) by Top 10 Job Groups",
+)
+fig_jg.update_layout(height=500)
+fig_jg.show()
+```
+
+```{python}
+jg_compare = []
+for jg in sorted(df["job_group"].dropna().unique()):
+    s = snap_start[snap_start["job_group"] == jg]
+    e = snap_end[snap_end["job_group"] == jg]
+    s_fte = s["full_time_equivalent"].sum()
+    e_fte = e["full_time_equivalent"].sum()
+    s_sal = s["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    e_sal = e["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    if s_fte == 0 and e_fte == 0:
+        continue
+    jg_compare.append({
+        "Job Group": jg,
+        f"FTE ({start_label})": s_fte,
+        f"FTE ({end_label})": e_fte,
+        "FTE Chg": e_fte - s_fte,
+        "FTE % Chg": (e_fte - s_fte) / s_fte * 100 if s_fte else np.nan,
+        f"Salary ({start_label})": s_sal,
+        f"Salary ({end_label})": e_sal,
+        "Salary Chg": e_sal - s_sal,
+        "Salary % Chg": (e_sal - s_sal) / s_sal * 100 if s_sal else np.nan,
+    })
+
+jgc = pd.DataFrame(jg_compare).sort_values("Salary Chg", ascending=False)
+jgc_display = jgc.copy()
+for c in [f"FTE ({start_label})", f"FTE ({end_label})"]:
+    jgc_display[c] = jgc_display[c].map("{:,.0f}".format)
+jgc_display["FTE Chg"] = jgc_display["FTE Chg"].map("{:+,.0f}".format)
+jgc_display["FTE % Chg"] = jgc_display["FTE % Chg"].apply(
+    lambda x: "{:+.1f}%".format(x) if pd.notna(x) else "New")
+for c in [f"Salary ({start_label})", f"Salary ({end_label})"]:
+    jgc_display[c] = jgc_display[c].map("${:,.0f}".format)
+jgc_display["Salary Chg"] = jgc_display["Salary Chg"].map("${:+,.0f}".format)
+jgc_display["Salary % Chg"] = jgc_display["Salary % Chg"].apply(
+    lambda x: "{:+.1f}%".format(x) if pd.notna(x) else "New")
+
+Markdown(jgc_display.to_markdown(index=False))
+```
+
+
+### Job Group Growth: Administration vs Academic Departments
+
+```{python}
+for dept_type_label in ["Administration & Student Services", "Academic Departments"]:
+    rows = []
+    for jg in top_jg:
+        s = snap_start[(snap_start["dept_type"] == dept_type_label) &
+                        (snap_start["job_group"] == jg)]
+        e = snap_end[(snap_end["dept_type"] == dept_type_label) &
+                      (snap_end["job_group"] == jg)]
+        s_fte = s["full_time_equivalent"].sum()
+        e_fte = e["full_time_equivalent"].sum()
+        s_sal = s["FTE_Adjusted_Salary_2021_Dollars"].sum()
+        e_sal = e["FTE_Adjusted_Salary_2021_Dollars"].sum()
+        if s_fte == 0 and e_fte == 0:
+            continue
+        rows.append({
+            "Job Group": jg,
+            f"FTE ({start_label})": f"{s_fte:,.0f}",
+            f"FTE ({end_label})": f"{e_fte:,.0f}",
+            "FTE Chg": f"{e_fte - s_fte:+,.0f}",
+            f"Salary ({start_label})": f"${s_sal:,.0f}",
+            f"Salary ({end_label})": f"${e_sal:,.0f}",
+            "Salary Chg": f"${e_sal - s_sal:+,.0f}",
+        })
+    if rows:
+        cross = pd.DataFrame(rows)
+        display(Markdown(f"**{dept_type_label}**\n\n" + cross.to_markdown(index=False)))
+```
+
+
+## Position-Level Expenditure Changes
+
+Which specific job titles within L&S saw the largest increases in total salary
+expenditure (in real 2021 dollars)?
+
+```{python}
+title_start = (
+    snap_start.dropna(subset=["job_group"])
+    .groupby(["job_group", "title"])
+    .agg(
+        fte_start=("full_time_equivalent", "sum"),
+        n_start=("id", "nunique"),
+        sal_start=("FTE_Adjusted_Salary_2021_Dollars", "sum"),
+    )
+    .reset_index()
+)
+title_end = (
+    snap_end.dropna(subset=["job_group"])
+    .groupby(["job_group", "title"])
+    .agg(
+        fte_end=("full_time_equivalent", "sum"),
+        n_end=("id", "nunique"),
+        sal_end=("FTE_Adjusted_Salary_2021_Dollars", "sum"),
+    )
+    .reset_index()
+)
+
+title_cmp = title_start.merge(title_end, on=["job_group", "title"], how="outer").fillna(0)
+title_cmp["fte_change"] = title_cmp["fte_end"] - title_cmp["fte_start"]
+title_cmp["sal_change"] = title_cmp["sal_end"] - title_cmp["sal_start"]
+title_cmp["sal_pct_change"] = np.where(
+    title_cmp["sal_start"] > 0,
+    title_cmp["sal_change"] / title_cmp["sal_start"] * 100,
+    np.nan,
+)
+title_cmp = title_cmp.sort_values("sal_change", ascending=False)
+
+title_cmp_display = title_cmp.head(30).copy()
+title_cmp_display["n_start"] = title_cmp_display["n_start"].astype(int)
+title_cmp_display["n_end"] = title_cmp_display["n_end"].astype(int)
+title_cmp_display.columns = [
+    "Job Group", "Title",
+    f"FTE ({start_label})", f"N ({start_label})", f"Salary ({start_label})",
+    f"FTE ({end_label})", f"N ({end_label})", f"Salary ({end_label})",
+    "FTE Chg", "Salary Chg", "Salary % Chg",
+]
+for c in [f"FTE ({start_label})", f"FTE ({end_label})"]:
+    title_cmp_display[c] = title_cmp_display[c].map("{:.0f}".format)
+title_cmp_display["FTE Chg"] = title_cmp_display["FTE Chg"].map("{:+.0f}".format)
+for c in [f"Salary ({start_label})", f"Salary ({end_label})"]:
+    title_cmp_display[c] = title_cmp_display[c].map("${:,.0f}".format)
+title_cmp_display["Salary Chg"] = title_cmp_display["Salary Chg"].map("${:+,.0f}".format)
+title_cmp_display["Salary % Chg"] = title_cmp_display["Salary % Chg"].apply(
+    lambda x: "{:+.1f}%".format(x) if pd.notna(x) else "New")
+
+Markdown("**Top 30 L&S titles by salary expenditure increase (2021 $)**\n\n" +
+         title_cmp_display.to_markdown(index=False))
+```
+
+**Top 30 titles by salary expenditure *decrease* (2021 $):**
+
+```{python}
+title_bot = title_cmp.tail(30).sort_values("sal_change").copy()
+title_bot["n_start"] = title_bot["n_start"].astype(int)
+title_bot["n_end"] = title_bot["n_end"].astype(int)
+title_bot.columns = [
+    "Job Group", "Title",
+    f"FTE ({start_label})", f"N ({start_label})", f"Salary ({start_label})",
+    f"FTE ({end_label})", f"N ({end_label})", f"Salary ({end_label})",
+    "FTE Chg", "Salary Chg", "Salary % Chg",
+]
+for c in [f"FTE ({start_label})", f"FTE ({end_label})"]:
+    title_bot[c] = title_bot[c].map("{:.0f}".format)
+title_bot["FTE Chg"] = title_bot["FTE Chg"].map("{:+.0f}".format)
+for c in [f"Salary ({start_label})", f"Salary ({end_label})"]:
+    title_bot[c] = title_bot[c].map("${:,.0f}".format)
+title_bot["Salary Chg"] = title_bot["Salary Chg"].map("${:+,.0f}".format)
+title_bot["Salary % Chg"] = title_bot["Salary % Chg"].apply(
+    lambda x: "{:+.1f}%".format(x) if pd.notna(x) else "Removed")
+
+Markdown(title_bot.to_markdown(index=False))
+```
+
+
+## Individuals with Largest Salary Increases
+
+This section identifies the 15 non-faculty L&S individuals with the largest
+percentage salary increases between consecutive snapshots. Faculty are excluded
+because salary swings often reflect changes in external funding or practice
+plan arrangements.
+
+```{python}
+consecutive_pairs = list(zip(all_dates[:-1], all_dates[1:]))
+
+big_jumps = []
+
+for date_before, date_after in consecutive_pairs:
+    snap_a = df[df["Date"] == date_before][
+        ["id", "first_name", "last_name", "department", "dept_type",
+         "title", "jobcode", "employee_category",
+         "current_annual_contracted_salary", "full_time_equivalent"]
+    ].copy()
+    snap_b = df[df["Date"] == date_after][
+        ["id", "first_name", "last_name", "department", "dept_type",
+         "title", "jobcode", "employee_category",
+         "current_annual_contracted_salary", "full_time_equivalent"]
+    ].copy()
+
+    # Keep primary appointment per person (highest salary)
+    snap_a = snap_a.sort_values("current_annual_contracted_salary",
+                                ascending=False).drop_duplicates("id", keep="first")
+    snap_b = snap_b.sort_values("current_annual_contracted_salary",
+                                ascending=False).drop_duplicates("id", keep="first")
+
+    merged = snap_a.merge(snap_b, on="id", suffixes=("_before", "_after"))
+
+    # Filter to meaningful salaries (> $30k both periods)
+    merged = merged[
+        (merged["current_annual_contracted_salary_before"] >= 30000) &
+        (merged["current_annual_contracted_salary_after"] >= 30000) &
+        (merged["full_time_equivalent_before"] >= 0.5) &
+        (merged["full_time_equivalent_after"] >= 0.5)
+    ]
+
+    merged["pct_change"] = (
+        (merged["current_annual_contracted_salary_after"] -
+         merged["current_annual_contracted_salary_before"]) /
+        merged["current_annual_contracted_salary_before"] * 100
+    )
+    merged["dollar_change"] = (
+        merged["current_annual_contracted_salary_after"] -
+        merged["current_annual_contracted_salary_before"]
+    )
+    merged["period"] = f"{date_before:%Y-%m} → {date_after:%Y-%m}"
+
+    big_jumps.append(merged)
+
+all_jumps = pd.concat(big_jumps, ignore_index=True)
+
+# Exclude faculty from both before and after
+all_jumps = all_jumps[
+    (all_jumps["employee_category_after"] != "Faculty") &
+    (all_jumps["employee_category_before"] != "Faculty")
+]
+
+# Top 15 by percentage increase (non-faculty only)
+top15 = all_jumps.nlargest(15, "pct_change")
+
+top15_display = pd.DataFrame({
+    "Name": top15["first_name_after"] + " " + top15["last_name_after"],
+    "Period": top15["period"],
+    "Department (Before)": top15["department_before"],
+    "Department (After)": top15["department_after"],
+    "Title (Before)": top15["title_before"],
+    "Title (After)": top15["title_after"],
+    "Category": top15["employee_category_after"],
+    "Salary Before": top15["current_annual_contracted_salary_before"].map("${:,.0f}".format),
+    "Salary After": top15["current_annual_contracted_salary_after"].map("${:,.0f}".format),
+    "$ Change": top15["dollar_change"].map("${:+,.0f}".format),
+    "% Change": top15["pct_change"].map("{:+.1f}%".format),
+})
+
+Markdown("### Top 15 Largest Individual Salary Increases (consecutive snapshots)\n\n" +
+         top15_display.to_markdown(index=False))
+```
+
+```{python}
+# Context: what changed?
+analysis = []
+for _, row in top15.iterrows():
+    reasons = []
+    if row["title_before"] != row["title_after"]:
+        reasons.append("Title change")
+    if row["department_before"] != row["department_after"]:
+        reasons.append("Department transfer")
+    if row["employee_category_before"] != row["employee_category_after"]:
+        reasons.append("Category change")
+    if not reasons:
+        reasons.append("Same title/department — pure salary increase")
+    analysis.append({
+        "Name": f"{row['first_name_after']} {row['last_name_after']}",
+        "Period": row["period"],
+        "% Change": f"{row['pct_change']:+.1f}%",
+        "Likely Reason": "; ".join(reasons),
+    })
+
+Markdown("### What Changed?\n\n" +
+         pd.DataFrame(analysis).to_markdown(index=False))
+```
+
+
+## Salary Growth Distribution by Employee Category
+
+```{python}
+snap_first = df[df["Date"] == start_date].copy()
+snap_last = df[df["Date"] == end_date].copy()
+
+snap_first = (snap_first.sort_values("current_annual_contracted_salary", ascending=False)
+              .drop_duplicates("id", keep="first"))
+snap_last = (snap_last.sort_values("current_annual_contracted_salary", ascending=False)
+             .drop_duplicates("id", keep="first"))
+
+long_term = snap_first[["id", "current_annual_contracted_salary", "employee_category",
+                         "FTE_Adjusted_Salary_2021_Dollars"]].merge(
+    snap_last[["id", "current_annual_contracted_salary", "employee_category",
+               "FTE_Adjusted_Salary_2021_Dollars"]],
+    on="id", suffixes=("_start", "_end"),
+)
+long_term = long_term[
+    (long_term["current_annual_contracted_salary_start"] >= 30000) &
+    (long_term["current_annual_contracted_salary_end"] >= 30000)
+]
+long_term["nominal_pct"] = (
+    (long_term["current_annual_contracted_salary_end"] -
+     long_term["current_annual_contracted_salary_start"]) /
+    long_term["current_annual_contracted_salary_start"] * 100
+)
+long_term["real_pct"] = (
+    (long_term["FTE_Adjusted_Salary_2021_Dollars_end"] -
+     long_term["FTE_Adjusted_Salary_2021_Dollars_start"]) /
+    long_term["FTE_Adjusted_Salary_2021_Dollars_start"] * 100
+)
+long_term["category"] = long_term["employee_category_end"]
+
+fig_cat = px.box(
+    long_term, x="category", y="real_pct",
+    color="category", points=False,
+    color_discrete_sequence=WONG,
+    labels={"real_pct": f"Real Salary Change % ({start_label} → {end_label})",
+            "category": "Employee Category"},
+    title=f"L&S Real Salary Growth by Employee Category ({start_label} → {end_label})",
+)
+fig_cat.update_layout(height=450, showlegend=False)
+fig_cat.show()
+```
+
+```{python}
+cat_summary = (
+    long_term.groupby("category")
+    .agg(
+        n=("real_pct", "size"),
+        median_nominal=("nominal_pct", "median"),
+        median_real=("real_pct", "median"),
+        pct_90=("real_pct", lambda x: np.percentile(x, 90)),
+        pct_10=("real_pct", lambda x: np.percentile(x, 10)),
+    )
+    .reset_index()
+    .sort_values("median_real", ascending=False)
+)
+cat_summary.columns = ["Category", "N", "Median Nominal %", "Median Real %",
+                        "90th %ile Real", "10th %ile Real"]
+for c in cat_summary.columns[2:]:
+    cat_summary[c] = cat_summary[c].map("{:+.1f}%".format)
+
+Markdown(f"**L&S salary growth {start_label} → {end_label} for employees in both snapshots**\n\n" +
+         cat_summary.to_markdown(index=False))
+```
+
+
+## Sub-Period Trend Analysis
+
+```{python}
+period_changes = []
+for i in range(1, len(all_dates)):
+    d0 = all_dates[i - 1]
+    d1 = all_dates[i]
+    s0 = df[df["Date"] == d0]
+    s1 = df[df["Date"] == d1]
+
+    fte0 = s0["full_time_equivalent"].sum()
+    fte1 = s1["full_time_equivalent"].sum()
+    sal0 = s0["FTE_Adjusted_Salary_2021_Dollars"].sum()
+    sal1 = s1["FTE_Adjusted_Salary_2021_Dollars"].sum()
+
+    months = max((d1 - d0).days / 30.44, 1)
+
+    period_changes.append({
+        "Period": f"{d0:%Y-%m} → {d1:%Y-%m}",
+        "Months": f"{months:.0f}",
+        "FTE Start": fte0,
+        "FTE End": fte1,
+        "FTE Chg": fte1 - fte0,
+        "Salary Start (2021 $)": sal0,
+        "Salary End (2021 $)": sal1,
+        "Salary Chg (2021 $)": sal1 - sal0,
+        "Salary % Chg": (sal1 - sal0) / sal0 * 100,
+        "Annualized % Chg": ((sal1 / sal0) ** (12 / months) - 1) * 100,
+    })
+
+pc = pd.DataFrame(period_changes)
+pc_display = pc.copy()
+for c in ["FTE Start", "FTE End"]:
+    pc_display[c] = pc_display[c].map("{:,.0f}".format)
+pc_display["FTE Chg"] = pc_display["FTE Chg"].map("{:+,.0f}".format)
+for c in ["Salary Start (2021 $)", "Salary End (2021 $)"]:
+    pc_display[c] = pc_display[c].map("${:,.0f}".format)
+pc_display["Salary Chg (2021 $)"] = pc_display["Salary Chg (2021 $)"].map("${:+,.0f}".format)
+pc_display["Salary % Chg"] = pc_display["Salary % Chg"].map("{:+.1f}%".format)
+pc_display["Annualized % Chg"] = pc_display["Annualized % Chg"].map("{:+.1f}%".format)
+
+Markdown(pc_display.to_markdown(index=False))
+```
+
+```{python}
+fig_periods = px.bar(
+    pc, x="Period", y="Annualized % Chg",
+    color="Annualized % Chg",
+    color_continuous_scale=["#D55E00", "#F0E442", "#009E73"],
+    labels={"Annualized % Chg": "Annualized Real Salary Growth %"},
+    title="L&S Annualized Real Salary Expenditure Growth by Period",
+)
+fig_periods.update_layout(height=400, showlegend=False)
+fig_periods.show()
+```
+
+### Sub-Period Growth: Administration vs Academic
+
+```{python}
+subperiod_type = []
+for i in range(1, len(all_dates)):
+    d0 = all_dates[i - 1]
+    d1 = all_dates[i]
+    months = max((d1 - d0).days / 30.44, 1)
+    for dt in ["Administration & Student Services", "Academic Departments"]:
+        s0 = df[(df["Date"] == d0) & (df["dept_type"] == dt)]
+        s1 = df[(df["Date"] == d1) & (df["dept_type"] == dt)]
+        sal0 = s0["FTE_Adjusted_Salary_2021_Dollars"].sum()
+        sal1 = s1["FTE_Adjusted_Salary_2021_Dollars"].sum()
+        ann_chg = ((sal1 / sal0) ** (12 / months) - 1) * 100 if sal0 > 0 else np.nan
+        subperiod_type.append({
+            "Period": f"{d0:%Y-%m} → {d1:%Y-%m}",
+            "Department Type": dt,
+            "Annualized % Chg": ann_chg,
+        })
+
+spt = pd.DataFrame(subperiod_type)
+
+fig_spt = px.bar(
+    spt, x="Period", y="Annualized % Chg", color="Department Type",
+    barmode="group", color_discrete_sequence=WONG,
+    labels={"Annualized % Chg": "Annualized Real Salary Growth %"},
+    title="L&S Annualized Real Salary Growth: Admin vs Academic by Period",
+)
+fig_spt.update_layout(height=450)
+fig_spt.show()
+```
+
+
+## Administrative Overhead Within L&S
+
+What share of L&S salary expenditure goes to administrative departments
+vs academic departments?
+
+```{python}
+ratio_data = []
+for d in all_dates:
+    snap = df[df["Date"] == d]
+    for dt in ["Administration & Student Services", "Academic Departments"]:
+        sal = snap[snap["dept_type"] == dt]["FTE_Adjusted_Salary_2021_Dollars"].sum()
+        ratio_data.append({
+            "Date": f"{d:%Y-%m}",
+            "Department Type": dt,
+            "Salary (2021 $)": sal,
+        })
+
+ratio_df = pd.DataFrame(ratio_data)
+total_by_date = ratio_df.groupby("Date")["Salary (2021 $)"].sum().reset_index()
+total_by_date.columns = ["Date", "Total"]
+ratio_df = ratio_df.merge(total_by_date, on="Date")
+ratio_df["Share %"] = ratio_df["Salary (2021 $)"] / ratio_df["Total"] * 100
+
+fig_ratio = px.area(
+    ratio_df, x="Date", y="Share %", color="Department Type",
+    color_discrete_sequence=WONG,
+    labels={"Share %": "% of L&S Salary Expenditure"},
+    title="Share of L&S Salary Expenditure: Admin vs Academic",
+)
+fig_ratio.update_layout(height=450)
+fig_ratio.show()
+```
+
+```{python}
+admin_share = ratio_df[ratio_df["Department Type"] == "Administration & Student Services"].copy()
+admin_share["Admin Salary"] = admin_share["Salary (2021 $)"].map("${:,.0f}".format)
+admin_share["L&S Total"] = admin_share["Total"].map("${:,.0f}".format)
+admin_share["Admin Share"] = admin_share["Share %"].map("{:.1f}%".format)
+
+Markdown("**Administration share of L&S salary expenditure over time:**\n\n" +
+         admin_share[["Date", "Admin Salary", "L&S Total", "Admin Share"]]
+         .to_markdown(index=False))
+```
+
+
+---
+
+*Data sources: UW-Madison public salary records, `{python} start_label` through
+`{python} end_label` (`{python} len(all_dates)` snapshots). Filtered to
+College of Letters & Science only. Salaries are inflation-adjusted to 2021
+dollars using FRED CPI series CPIAUCSL. Individual salary comparisons are
+limited to employees present in both compared snapshots with salary ≥ $30,000
+and FTE ≥ 0.50. Data cleaned via the project pipeline (duplicate/over-allocated
+appointments removed).*

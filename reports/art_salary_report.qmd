@@ -138,7 +138,7 @@ def load_snapshot(filepath: str) -> pd.DataFrame:
 # Load data
 # ---------------------------------------------------------------------------
 
-files = sorted(glob.glob("data/*.xlsx"))
+files = sorted(glob.glob("../data/*.xlsx"))
 snapshots = {}
 for f in files:
     m = re.search(r"(\d{4})[-._ ]?(\d{2})", os.path.basename(f))
@@ -534,7 +534,7 @@ number of administrative positions, not just where they sit.
 ```{python}
 # Load CPI data (fetched from FRED) to inflate 2024-04 salaries to 2026-03 dollars.
 # March 2026 CPI is not yet released; we use the latest available month as proxy.
-cpi = pd.read_csv("data/cpi_data.csv")
+cpi = pd.read_csv("../data/cpi_data.csv")
 cpi_start = cpi.loc[cpi["Date"] == "2024-04-01", "CPI"].values[0]
 cpi_latest = cpi.dropna(subset=["CPI"]).sort_values("Date").iloc[-1]
 cpi_end = cpi_latest["CPI"]
