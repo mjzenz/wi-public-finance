@@ -148,49 +148,46 @@ def calculate_peer_comparison(df, employee_id, jobcode, division, current_salary
     # Compare against peers from the same date
     peers_df = df[df['Date'] == emp_last_date]
 
+    def build_peer_data(peer_rows, label):
+        """Build comparison dict for a set of peers, including seniority data."""
+        if len(peer_rows) <= 1:
+            return None
+        salaries = peer_rows['current_annual_contracted_salary'].dropna()
+        salary_percentile = (salaries < current_salary).sum() / len(salaries) * 100
+
+        # Calculate years on staff for scatter plot
+        peer_seniority = peer_rows[['current_annual_contracted_salary', 'date_of_hire']].copy()
+        peer_seniority['date_of_hire'] = pd.to_datetime(peer_seniority['date_of_hire'], errors='coerce')
+        peer_seniority['years_on_staff'] = (emp_last_date - peer_seniority['date_of_hire']).dt.days / 365.25
+        peer_seniority = peer_seniority.dropna(subset=['years_on_staff', 'current_annual_contracted_salary'])
+        peer_seniority = peer_seniority[peer_seniority['years_on_staff'] >= 0]
+
+        return {
+            'name': label,
+            'peer_count': len(peer_rows),
+            'salary_percentile': salary_percentile,
+            'salary_median': salaries.median(),
+            'salary_mean': salaries.mean(),
+            'salaries': salaries.tolist(),
+            'seniority_salaries': peer_seniority['current_annual_contracted_salary'].tolist(),
+            'seniority_years': peer_seniority['years_on_staff'].tolist(),
+        }
+
     comparisons = {}
 
-    # 1. Department comparison
-    dept_peers = peers_df[peers_df['division_department'] == dept]
-    if len(dept_peers) > 1:
-        dept_salaries = dept_peers['current_annual_contracted_salary'].dropna()
-        salary_percentile = (dept_salaries < current_salary).sum() / len(dept_salaries) * 100
-        comparisons['department'] = {
-            'name': dept,
-            'peer_count': len(dept_peers),
-            'salary_percentile': salary_percentile,
-            'salary_median': dept_salaries.median(),
-            'salary_mean': dept_salaries.mean(),
-            'salaries': dept_salaries.tolist()
-        }
+    dept_data = build_peer_data(peers_df[peers_df['division_department'] == dept], dept)
+    if dept_data:
+        comparisons['department'] = dept_data
 
-    # 2. Division + Title comparison
     div_title_peers = peers_df[(peers_df['division'] == division) & (peers_df['jobcode'] == jobcode)]
-    if len(div_title_peers) > 1:
-        div_salaries = div_title_peers['current_annual_contracted_salary'].dropna()
-        salary_percentile = (div_salaries < current_salary).sum() / len(div_salaries) * 100
-        comparisons['division_title'] = {
-            'name': f"{jobcode} in {division}",
-            'peer_count': len(div_title_peers),
-            'salary_percentile': salary_percentile,
-            'salary_median': div_salaries.median(),
-            'salary_mean': div_salaries.mean(),
-            'salaries': div_salaries.tolist()
-        }
+    div_data = build_peer_data(div_title_peers, f"{jobcode} in {division}")
+    if div_data:
+        comparisons['division_title'] = div_data
 
-    # 3. University-wide title comparison
     univ_title_peers = peers_df[peers_df['jobcode'] == jobcode]
-    if len(univ_title_peers) > 1:
-        univ_salaries = univ_title_peers['current_annual_contracted_salary'].dropna()
-        salary_percentile = (univ_salaries < current_salary).sum() / len(univ_salaries) * 100
-        comparisons['university_title'] = {
-            'name': f"{jobcode} University-wide",
-            'peer_count': len(univ_title_peers),
-            'salary_percentile': salary_percentile,
-            'salary_median': univ_salaries.median(),
-            'salary_mean': univ_salaries.mean(),
-            'salaries': univ_salaries.tolist()
-        }
+    univ_data = build_peer_data(univ_title_peers, f"{jobcode} University-wide")
+    if univ_data:
+        comparisons['university_title'] = univ_data
 
     return comparisons, emp_last_date
 
@@ -406,7 +403,15 @@ def render_individual_page(df):
     with col3:
         hire_date = current.get('date_of_hire', None)
         if pd.notna(hire_date):
+            hire_dt = pd.to_datetime(hire_date)
+            ref_date = current['Date']
+            years_on_staff = (ref_date - hire_dt).days / 365.25
             st.write(f"**Hire Date:** {str(hire_date)[:10]}")
+            if years_on_staff >= 0:
+                st.write(f"**Years on Staff:** {years_on_staff:.1f}")
+        else:
+            years_on_staff = None
+            st.write("**Hire Date:** N/A")
 
         job_group = current.get('job_group', current.get('jobgroup', None))
         st.write(f"**Job Group:** {job_group if pd.notna(job_group) else 'N/A'}")
@@ -553,6 +558,51 @@ def render_individual_page(df):
                         xaxis_tickformat='$,.0f', showlegend=False
                     )
                     st.plotly_chart(fig, use_container_width=True)
+
+                # Salary vs seniority scatter plot
+                if comp_data['seniority_years'] and len(comp_data['seniority_years']) > 2:
+                    fig_seniority = go.Figure()
+                    fig_seniority.add_trace(go.Scatter(
+                        x=comp_data['seniority_years'],
+                        y=comp_data['seniority_salaries'],
+                        mode='markers',
+                        marker=dict(color=WONG[0], size=7, opacity=0.6),
+                        name='Peers',
+                    ))
+                    # Highlight this employee
+                    emp_hire = current.get('date_of_hire', None)
+                    if pd.notna(emp_hire):
+                        emp_years = (current['Date'] - pd.to_datetime(emp_hire)).days / 365.25
+                        if emp_years >= 0:
+                            fig_seniority.add_trace(go.Scatter(
+                                x=[emp_years],
+                                y=[current['current_annual_contracted_salary']],
+                                mode='markers',
+                                marker=dict(color='red', size=14, symbol='star'),
+                                name='This employee',
+                            ))
+                    # Trend line
+                    t_arr = np.array(comp_data['seniority_years'])
+                    s_arr = np.array(comp_data['seniority_salaries'])
+                    if len(t_arr) > 2 and t_arr.std() > 0:
+                        z = np.polyfit(t_arr, s_arr, 1)
+                        x_line = np.array([t_arr.min(), t_arr.max()])
+                        y_line = z[0] * x_line + z[1]
+                        fig_seniority.add_trace(go.Scatter(
+                            x=x_line, y=y_line, mode='lines',
+                            line=dict(color='gray', dash='dash', width=1),
+                            name=f'Trend (${z[0]:+,.0f}/yr)',
+                        ))
+                    fig_seniority.update_layout(
+                        title=f"Salary vs Years on Staff: {comp_data['name']}",
+                        xaxis_title="Years on Staff",
+                        yaxis_title="Salary",
+                        yaxis_tickformat='$,.0f',
+                        height=350,
+                        legend=dict(orientation="h", yanchor="top", y=-0.2,
+                                    xanchor="center", x=0.5),
+                    )
+                    st.plotly_chart(fig_seniority, use_container_width=True)
     else:
         st.info("No peer comparison data available.")
 
@@ -633,12 +683,19 @@ def render_department_page(df):
     dept_primary = dept_primary.merge(
         growth[['id', 'pct_growth', 'dollar_growth']], on='id', how='left')
 
+    # Calculate years on staff
+    dept_primary['date_of_hire'] = pd.to_datetime(dept_primary['date_of_hire'], errors='coerce')
+    dept_primary['years_on_staff'] = (
+        (latest_date - dept_primary['date_of_hire']).dt.days / 365.25
+    )
+
     # Build display table
     display_cols = {
         'first_name': 'First Name',
         'last_name': 'Last Name',
         'title': 'Title',
         'current_annual_contracted_salary': 'Salary',
+        'years_on_staff': 'Years',
         'pct_growth': 'Growth %',
         'dollar_growth': 'Growth $',
         'full_time_equivalent': 'FTE',
@@ -651,6 +708,9 @@ def render_department_page(df):
     if 'Salary' in show_df.columns:
         show_df['Salary'] = show_df['Salary'].apply(
             lambda x: f"${x:,.0f}" if pd.notna(x) else "")
+    if 'Years' in show_df.columns:
+        show_df['Years'] = show_df['Years'].apply(
+            lambda x: f"{x:.1f}" if pd.notna(x) and x >= 0 else "")
     if 'Growth %' in show_df.columns:
         show_df['Growth %'] = show_df['Growth %'].apply(
             lambda x: f"{x:+.1f}%" if pd.notna(x) else "")
