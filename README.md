@@ -179,13 +179,97 @@ The pipeline applies several corrections during `clean_salary_data()`:
 
 ## Deployment
 
-The app runs on a single EC2 instance behind Nginx with Let's Encrypt SSL.
-See `deploy/` for all configuration files.
+The app runs on an EC2 t3.micro instance (Amazon Linux 2023) behind Nginx
+with Let's Encrypt SSL, served at `wiscdata.com`.
 
-**Updating data (twice a year):**
+### Architecture
+
+```
+Browser → wiscdata.com (DNS) → Elastic IP → Nginx (443/SSL) → Streamlit (127.0.0.1:8501)
+```
+
+### Server Setup
+
+See `deploy/` for configuration files:
+- `setup.sh` — Full EC2 provisioning script
+- `wiscdata.service` — systemd service for Streamlit
+- `nginx-wiscdata.conf` — Nginx reverse proxy with WebSocket support
+- `update-data.sh` — Data update helper script
+
+Key server paths:
+- App code: `/opt/wiscdata/app/`
+- Python venv: `/opt/wiscdata/venv/`
+- Streamlit config: `/opt/wiscdata/app/.streamlit/config.toml`
+- SSL certs: managed by Certbot (auto-renews)
+
+The Streamlit config must include these settings for WebSocket to work
+through the Nginx proxy:
+```toml
+[server]
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+```
+
+### Pre-built Data
+
+The app loads from a pre-built parquet file (`data/salary_clean.parquet`)
+rather than processing Excel files on startup. This reduces startup time
+from ~60s to ~1s and keeps memory usage manageable on the t3.micro.
+
+To rebuild the parquet after adding new Excel files:
 ```bash
-scp "Updated YYYY-MM *.xlsx" ec2-user@wiscdata.com:/opt/wiscdata/app/data/
-ssh ec2-user@wiscdata.com "sudo systemctl restart wiscdata"
+python build_data.py
+```
+
+### Updating Data (twice a year)
+
+1. Upload the new salary Excel file:
+   ```bash
+   scp "Updated YYYY-MM All Faculty and Staff.xlsx" ec2-user@wiscdata.com:/tmp/
+   ```
+
+2. SSH in and move it to the data directory:
+   ```bash
+   ssh ec2-user@wiscdata.com
+   sudo mv /tmp/"Updated YYYY-MM All Faculty and Staff.xlsx" /opt/wiscdata/app/data/
+   sudo chown wiscdata:wiscdata /opt/wiscdata/app/data/*.xlsx
+   ```
+
+3. Rebuild the parquet and restart:
+   ```bash
+   sudo -u wiscdata /opt/wiscdata/venv/bin/python /opt/wiscdata/app/build_data.py
+   sudo systemctl restart wiscdata
+   ```
+
+### Updating Code
+
+```bash
+ssh ec2-user@wiscdata.com
+cd /opt/wiscdata/app
+sudo -u wiscdata git pull origin master
+sudo -u wiscdata /opt/wiscdata/venv/bin/pip install -r requirements.txt
+sudo systemctl restart wiscdata
+```
+
+### Troubleshooting
+
+```bash
+# Check if app is running
+sudo systemctl status wiscdata --no-pager
+
+# View app logs
+sudo journalctl -u wiscdata -n 50 --no-pager
+
+# Test Streamlit is responding locally
+curl -I http://127.0.0.1:8501
+
+# Test Nginx proxy
+curl -I https://wiscdata.com
+
+# Restart everything
+sudo systemctl restart wiscdata
+sudo systemctl restart nginx
 ```
 
 ## Requirements
