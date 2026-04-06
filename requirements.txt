@@ -4,6 +4,7 @@
 # Data processing
 pandas>=2.0.0
 openpyxl>=3.1.0          # For reading Excel files
+pyarrow>=14.0.0          # For parquet file I/O
 numpy>=1.24.0
 
 # API access for CPI data

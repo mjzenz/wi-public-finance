@@ -16,6 +16,7 @@ Running the App:
 ----------------
     streamlit run salary_app.py
 """
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -48,20 +49,27 @@ WONG = [
 MAX_SEARCH_RESULTS = 200
 
 
+PARQUET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'salary_clean.parquet')
+
+
 @st.cache_data
 def load_data():
     """
-    Load and cache the salary data.
+    Load cleaned salary data from pre-built parquet file.
 
-    Keeps all appointments (including split appointments like 0.5 + 0.5).
-    Filters out near-zero salary appointments (< $1000).
+    The parquet file is created by running: python build_data.py
+    This should be run whenever new salary Excel files are added.
     """
+    if os.path.exists(PARQUET_PATH):
+        df = pd.read_parquet(PARQUET_PATH)
+        return df
+
+    # Fallback: build from Excel files if parquet doesn't exist
+    st.warning("Pre-built data not found. Loading from Excel files (this will be slow). "
+               "Run `python build_data.py` to pre-build the data.")
     filenames = import_data.read_salary_file_names()
     df = import_data.clean_salary_data(filenames)
-
-    # Filter out near-zero salary appointments (courtesy/student roles)
     df = df[df['current_annual_contracted_salary'] >= 1000].copy()
-
     return df
 
 
